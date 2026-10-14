@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+venv/
+.venv/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+
+# Local databases, exports, and backups
+*.sqlite3
+*.sqlite
+*.db
+*.dump
+*.backup
+*.sql
+databases/
+
+# Frontend dependencies and generated output
+frontend/node_modules/
+frontend/dist/
+
+# Editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
