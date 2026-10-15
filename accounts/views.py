@@ -11,10 +11,6 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
 from django.db import IntegrityError, transaction
-from django.http import HttpResponseRedirect
-from django.shortcuts import render
-from django.urls import reverse
-from django.views import View
 from rest_framework import serializers, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -890,95 +886,3 @@ class SetPasswordView(APIView):
 class SetPasswordSerializer(serializers.Serializer):
     token = serializers.CharField()
     password = serializers.CharField(write_only=True, trim_whitespace=False)
-
-
-class SetPasswordPageView(View):
-    template_name = 'accounts/set_password.html'
-
-    def get(self, request):
-        if request.GET.get('complete') == '1':
-            return render(
-                request,
-                self.template_name,
-                {
-                    'complete': True,
-                    'frontend_url': settings.BAYYINAH_FRONTEND_URL,
-                },
-            )
-
-        token = request.GET.get('token', '')
-        if not token or not InvitationToken.objects.filter(
-            token=token,
-            is_used=False,
-        ).exists():
-            return render(
-                request,
-                self.template_name,
-                {
-                    'error': 'This invitation link is invalid or has already been used.',
-                    'frontend_url': settings.BAYYINAH_FRONTEND_URL,
-                },
-                status=400,
-            )
-        return render(
-            request,
-            self.template_name,
-            {
-                'token': token,
-                'frontend_url': settings.BAYYINAH_FRONTEND_URL,
-            },
-        )
-
-    def post(self, request):
-        token = request.POST.get('token', '')
-        password = request.POST.get('password', '')
-        password_confirmation = request.POST.get('password_confirmation', '')
-
-        if not token or not password or not password_confirmation:
-            return render(
-                request,
-                self.template_name,
-                {
-                    'token': token,
-                    'error': 'Enter and confirm your new password.',
-                    'frontend_url': settings.BAYYINAH_FRONTEND_URL,
-                },
-                status=400,
-            )
-        if password != password_confirmation:
-            return render(
-                request,
-                self.template_name,
-                {
-                    'token': token,
-                    'error': 'The passwords do not match.',
-                    'frontend_url': settings.BAYYINAH_FRONTEND_URL,
-                },
-                status=400,
-            )
-
-        try:
-            _set_invitation_password(token, password)
-        except ValidationError as error:
-            return render(
-                request,
-                self.template_name,
-                {
-                    'token': token,
-                    'errors': error.messages,
-                    'frontend_url': settings.BAYYINAH_FRONTEND_URL,
-                },
-                status=400,
-            )
-        except InvitationToken.DoesNotExist:
-            return render(
-                request,
-                self.template_name,
-                {
-                    'error': 'This invitation link is invalid or has already been used.',
-                    'frontend_url': settings.BAYYINAH_FRONTEND_URL,
-                },
-                status=400,
-            )
-
-        return HttpResponseRedirect(f"{reverse('set-password-page')}?complete=1")
