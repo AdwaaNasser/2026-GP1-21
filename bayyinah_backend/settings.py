@@ -63,7 +63,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': os.environ.get('BAYYINAH_DB_NAME', 'bayyinah'),
         'USER': os.environ.get('BAYYINAH_DB_USER', 'postgres'),
-        'PASSWORD': os.environ.get('BAYYINAH_DB_PASSWORD', '4400'),
+        'PASSWORD': os.environ.get('BAYYINAH_DB_PASSWORD'),
         'HOST': os.environ.get('BAYYINAH_DB_HOST', 'localhost'),
         'PORT': os.environ.get('BAYYINAH_DB_PORT', '5432'),
         'CONN_MAX_AGE': 60,
