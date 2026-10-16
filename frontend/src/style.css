@@ -1538,3 +1538,134 @@ tr:last-child td {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- Projects and tasks ---------- */
+.task-page {
+  display: grid;
+  gap: 20px;
+}
+
+.task-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.task-form label {
+  display: grid;
+  gap: 6px;
+  color: #51425a;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.task-form .wide,
+.task-form .button-row {
+  grid-column: 1 / -1;
+}
+
+.task-form input,
+.task-form select,
+.task-form textarea,
+.table-wrap select {
+  padding: 9px 11px;
+  border: 1px solid #e3dde7;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 13px;
+}
+
+.task-form textarea {
+  resize: vertical;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.link-button {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.badge {
+  display: inline-block;
+  padding: 5px 8px;
+  border-radius: 99px;
+  background: #f1eef4;
+  color: #51425a;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.status-in_progress { background: #e8f0ff; color: #2d4f9e; }
+.status-completed { background: #e7f4eb; color: var(--green); }
+.priority-high { background: var(--orange-light); color: #a34b18; }
+.priority-urgent { background: #fde8e8; color: #a12929; }
+
+.progress-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+}
+
+.progress-bar {
+  width: 120px;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: #eeeaf0;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--green);
+}
+
+.tab-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tab {
+  padding: 8px 12px;
+  border: 1px solid #e3dde7;
+  border-radius: 99px;
+  background: #fff;
+  color: #51425a;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.tab.active {
+  border-color: var(--purple);
+  background: var(--purple);
+  color: #fff;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin: 14px 0 18px;
+  font-size: 12px;
+}
+
+.detail-grid div {
+  display: grid;
+  gap: 4px;
+}
+
+@media (max-width: 700px) {
+  .task-form,
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+}

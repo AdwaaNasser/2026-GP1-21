@@ -171,7 +171,10 @@ export default function Dashboard({ role }) {
           <nav className="dashboard-subnav" aria-label="Workspace navigation">
             <a className="active" href={dashboardPath(role)}>Overview</a>
             {role === 'Manager' && <a href="#team">My department</a>}
+            {role === 'Manager' && <a href="/manager/projects">Projects</a>}
+            {role === 'Manager' && <a href="/manager/tasks">Tasks</a>}
             {role === 'Employee' && <a href="#team">My profile</a>}
+            {role === 'Employee' && <a href="/employee/tasks">My tasks</a>}
             <a href="/" onClick={(event) => { event.preventDefault(); logout(); }}>Sign out</a>
           </nav>
         )}

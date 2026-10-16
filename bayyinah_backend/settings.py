@@ -36,7 +36,9 @@ INSTALLED_APPS = [ 'django.contrib.admin',
   'rest_framework_simplejwt',
    'corsheaders',
     # Local app
- 'accounts', ]
+ 'accounts', 
+ 'workspace',
+ ]
 
 MIDDLEWARE = [ 'corsheaders.middleware.CorsMiddleware',
  # Must be at the very top
@@ -59,9 +61,9 @@ WSGI_APPLICATION = 'bayyinah_backend.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('BAYYINAH_DB_NAME', 'Bayyinah'),
+        'NAME': os.environ.get('BAYYINAH_DB_NAME', 'bayyinah'),
         'USER': os.environ.get('BAYYINAH_DB_USER', 'postgres'),
-        'PASSWORD': os.environ.get('BAYYINAH_DB_PASSWORD', ''),
+        'PASSWORD': os.environ.get('BAYYINAH_DB_PASSWORD', '4400'),
         'HOST': os.environ.get('BAYYINAH_DB_HOST', 'localhost'),
         'PORT': os.environ.get('BAYYINAH_DB_PORT', '5432'),
         'CONN_MAX_AGE': 60,
