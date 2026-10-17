@@ -1,5 +1,18 @@
 import { useEffect, useState } from 'react';
 import { apiRequest, clearLogin, getLogin, responseData } from './api.js';
+import Shell, { Banner } from './Shell.jsx';
+import {
+  EmptyState,
+  ProgressBar,
+  Stats,
+  StatusBadge,
+  TableSkeleton,
+  formatDate,
+  getJson,
+  isOverdue,
+  sortTasks,
+  useBanner,
+} from './taskUi.jsx';
 
 const BATCH_KEY = 'bayyinahCsvImport';
 
@@ -13,7 +26,8 @@ function initials(name = '') {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'B';
 }
 
-export default function Dashboard({ role }) {
+// The original dashboard. It is now used for HR only.
+function HrDashboard({ role }) {
   const [login, setLogin] = useState(null);
   const [employees, setEmployees] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
@@ -359,4 +373,168 @@ function EmployeeTable({ employees }) {
       </table>
     </div>
   );
+}
+
+// ---------- Manager and employee overview ----------
+
+const ACTIONABLE = ['todo', 'in_progress', 'changes_requested'];
+
+// A short list of tasks. Each row links to the page where the task can be opened.
+function TaskList({ tasks, href, empty }) {
+  if (tasks.length === 0) return <p className="ws-hint ws-list-empty">{empty}</p>;
+  return (
+    <ul className="ws-mini-list">
+      {tasks.map((task) => (
+        <li key={task.id}>
+          <a className="ws-plain-link" href={href(task)}>
+            <span className="ws-mini-title">{task.title}</span>
+            <span className="ws-mini-meta">{task.assignee.name} · {isOverdue(task) ? 'overdue since ' : 'due '}{formatDate(task.due_date)}</span>
+          </a>
+          <StatusBadge status={task.status} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function PeopleTable({ people }) {
+  if (people.length === 0) {
+    return <EmptyState icon="users" title="No employee records are available for this account yet" />;
+  }
+  return (
+    <div className="ws-table-card">
+      <table className="ws-table">
+        <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Department</th></tr></thead>
+        <tbody>
+          {people.map((person) => (
+            <tr key={person.id}>
+              <td className="ws-task-title">{person.full_name}</td>
+              <td>{person.email}</td>
+              <td>{person.role}</td>
+              <td>{person.department.name}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function OverviewContent({ role }) {
+  const isManager = role === 'Manager';
+  const { banner, failure, clear } = useBanner();
+  const [data, setData] = useState(null);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const [tasks, projects, people] = await Promise.all([
+          getJson('/api/workspace/tasks/'),
+          getJson('/api/workspace/projects/'),
+          getJson('/api/accounts/employees/'),
+        ]);
+        setData({ tasks, projects, people });
+      } catch (error) {
+        failure(error);
+        setData({ tasks: [], projects: [], people: [] });
+      }
+    }
+    load();
+  }, []);
+
+  if (!data) return <TableSkeleton rows={4} />;
+
+  const { tasks, projects, people } = data;
+
+  if (isManager) {
+    const open = tasks.filter((task) => task.status !== 'completed');
+    const review = sortTasks(tasks.filter((task) => task.status === 'in_review'), 'due');
+    const overdue = sortTasks(tasks.filter((task) => isOverdue(task)), 'due');
+    const taskHref = (task) => `/manager/tasks?task=${task.id}`;
+    return (
+      <>
+        <Banner message={banner.message} isError={banner.isError} onClose={clear} />
+        <Stats items={[
+          { label: 'Projects', value: projects.length },
+          { label: 'Open tasks', value: open.length },
+          { label: 'Awaiting review', value: review.length, tone: review.length ? 'warn' : '' },
+          { label: 'Overdue', value: overdue.length, tone: overdue.length ? 'danger' : '' },
+        ]}
+        />
+        <div className="ws-two-col">
+          <section className="ws-card ws-side-card">
+            <div className="ws-card-head"><h3>Awaiting your review</h3><a className="ws-link" href="/manager/tasks">All tasks</a></div>
+            <TaskList tasks={review.slice(0, 5)} href={taskHref} empty="Nothing is waiting for your review." />
+          </section>
+          <section className="ws-card ws-side-card">
+            <div className="ws-card-head"><h3>Overdue</h3><a className="ws-link" href="/manager/tasks">All tasks</a></div>
+            <TaskList tasks={overdue.slice(0, 5)} href={taskHref} empty="No overdue tasks." />
+          </section>
+        </div>
+        <section className="ws-card ws-side-card">
+          <div className="ws-card-head"><h3>Your projects</h3><a className="ws-link" href="/manager/projects">All projects</a></div>
+          {projects.length === 0 ? (
+            <p className="ws-hint ws-list-empty">You have not created any projects yet.</p>
+          ) : (
+            <ul className="ws-member-list">
+              {projects.slice(0, 5).map((project) => (
+                <li key={project.id} className="ws-member-row">
+                  <a className="ws-plain-link ws-task-title" href={`/manager/project?id=${project.id}`}>{project.name}</a>
+                  <ProgressBar progress={project.progress} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+        <section className="ws-card ws-side-card">
+          <div className="ws-card-head"><h3>Your department team</h3></div>
+          <PeopleTable people={people} />
+        </section>
+      </>
+    );
+  }
+
+  const mine = tasks.filter((task) => task.is_mine);
+  const actionable = mine.filter((task) => ACTIONABLE.includes(task.status));
+  const changes = mine.filter((task) => task.status === 'changes_requested');
+  const overdue = actionable.filter((task) => isOverdue(task));
+  const attention = sortTasks(
+    actionable.filter((task) => task.status === 'changes_requested' || isOverdue(task)),
+    'due',
+  );
+  return (
+    <>
+      <Banner message={banner.message} isError={banner.isError} onClose={clear} />
+      <Stats items={[
+        { label: 'Open tasks', value: actionable.length },
+        { label: 'Changes requested', value: changes.length, tone: changes.length ? 'danger' : '' },
+        { label: 'Overdue', value: overdue.length, tone: overdue.length ? 'danger' : '' },
+        { label: 'Submitted', value: mine.filter((task) => task.status === 'in_review').length },
+        { label: 'Completed', value: mine.filter((task) => task.status === 'completed').length },
+      ]}
+      />
+      <section className="ws-card ws-side-card">
+        <div className="ws-card-head"><h3>Needs your attention</h3><a className="ws-link" href="/employee/tasks">My tasks</a></div>
+        <TaskList tasks={attention.slice(0, 6)} href={(task) => `/employee/tasks?task=${task.id}`} empty="You are all caught up." />
+      </section>
+      <section className="ws-card ws-side-card">
+        <div className="ws-card-head"><h3>Your employee profile</h3></div>
+        <PeopleTable people={people} />
+      </section>
+    </>
+  );
+}
+
+function WorkspaceOverview({ role }) {
+  return (
+    <Shell role={role} title="Overview">
+      <OverviewContent role={role} />
+    </Shell>
+  );
+}
+
+// Managers and employees use the workspace layout. HR keeps the original dashboard.
+export default function Dashboard({ role }) {
+  if (role === 'HR') return <HrDashboard role={role} />;
+  return <WorkspaceOverview role={role} />;
 }
