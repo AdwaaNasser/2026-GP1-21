@@ -1,35 +1,51 @@
 import { useEffect, useState } from 'react';
-import Shell, { Banner } from './Shell.jsx';
-import { PriorityBadge, ProgressBar, StatusBadge, getJson, sendJson } from './taskUi.jsx';
+import Shell, { Banner, HeaderActions } from './Shell.jsx';
+import {
+  Avatar,
+  Drawer,
+  EmptyState,
+  Icon,
+  Modal,
+  ProgressBar,
+  ProjectForm,
+  Stats,
+  Switch,
+  TableSkeleton,
+  Tabs,
+  TaskForm,
+  TaskPanel,
+  TaskTable,
+  formatDate,
+  getJson,
+  isOverdue,
+  sendJson,
+  useBanner,
+  useEmployees,
+  useTaskActions,
+} from './taskUi.jsx';
 
-// Shared by the manager (can edit, can set visibility) and the employee (read only).
+// Shared by the manager (can edit the project, add tasks, choose members)
+// and the employee (can view the project and work on their own tasks).
 function DetailsContent({ role }) {
   const projectId = new URLSearchParams(window.location.search).get('id');
   const isManager = role === 'Manager';
+  const { banner, success, failure, clear } = useBanner();
+  const employees = useEmployees(isManager);
   const [project, setProject] = useState(null);
-  const [access, setAccess] = useState([]);
+  const [loadError, setLoadError] = useState('');
+  const [members, setMembers] = useState([]);
+  const [tab, setTab] = useState('tasks');
+  const [panel, setPanel] = useState(null); // { type: 'view', id } | { type: 'form', task }
   const [editing, setEditing] = useState(false);
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [message, setMessage] = useState('');
-  const [isError, setIsError] = useState(false);
-
-  function showError(error) {
-    setIsError(true);
-    setMessage(error.message);
-  }
+  const [savingMember, setSavingMember] = useState(null);
 
   async function loadProject() {
     try {
-      const data = await getJson(`/api/workspace/projects/${projectId}/`);
-      setProject(data);
-      setName(data.name);
-      setDescription(data.description);
-      if (isManager) {
-        setAccess(await getJson(`/api/workspace/projects/${projectId}/access/`));
-      }
+      setProject(await getJson(`/api/workspace/projects/${projectId}/`));
+      if (isManager) setMembers(await getJson(`/api/workspace/projects/${projectId}/members/`));
     } catch (error) {
-      showError(error);
+      if (project === null) setLoadError(error.message);
+      else failure(error);
     }
   }
 
@@ -37,144 +53,184 @@ function DetailsContent({ role }) {
     loadProject();
   }, []);
 
-  async function saveProject(event) {
-    event.preventDefault();
-    if (!name.trim()) {
-      setIsError(true);
-      setMessage('Project name is required.');
-      return;
-    }
-    try {
-      await sendJson(`/api/workspace/projects/${projectId}/`, 'PATCH', { name: name.trim(), description });
-      setEditing(false);
-      setIsError(false);
-      setMessage('Project updated.');
-      loadProject();
-    } catch (error) {
-      showError(error);
-    }
+  const actions = useTaskActions({ reload: loadProject, success });
+
+  async function saveProject(body) {
+    await sendJson(`/api/workspace/projects/${projectId}/`, 'PATCH', body);
+    setEditing(false);
+    success('Project updated.');
+    loadProject();
   }
 
-  async function changeMode(employeeId, mode) {
+  async function toggleMember(row, isMember) {
+    setSavingMember(row.employee_id);
     try {
-      await sendJson(`/api/workspace/projects/${projectId}/access/`, 'PUT', {
-        employee_id: employeeId,
-        mode,
+      await sendJson(`/api/workspace/projects/${projectId}/members/`, 'PUT', {
+        employee_id: row.employee_id,
+        is_member: isMember,
       });
-      setAccess(access.map((row) => (row.employee_id === employeeId ? { ...row, mode } : row)));
-      setIsError(false);
-      setMessage('Visibility updated.');
+      setMembers((current) => current.map((item) => (
+        item.employee_id === row.employee_id ? { ...item, is_member: isMember } : item
+      )));
+      success(isMember ? `${row.name} can now see the whole project.` : `${row.name} now only sees their assigned tasks.`);
     } catch (error) {
-      showError(error);
+      failure(error);
+    } finally {
+      setSavingMember(null);
     }
   }
 
-  if (!project) {
-    return <Banner message={message || 'Loading project…'} isError={isError} />;
-  }
+  const backPath = isManager ? '/manager/projects' : '/employee/tasks';
 
-  const backLink = isManager ? '/manager/projects' : '/employee/tasks';
+  if (loadError) {
+    return (
+      <div className="ws-card">
+        <EmptyState icon="alert" title="This project could not be opened" action={<a className="ws-btn ws-btn-secondary" href={backPath}>Back</a>}>
+          {loadError}
+        </EmptyState>
+      </div>
+    );
+  }
+  if (!project) return <TableSkeleton rows={4} />;
+
+  const tasks = project.tasks;
+  const selected = panel && panel.type === 'view' ? tasks.find((task) => task.id === panel.id) : null;
+  const memberCount = members.filter((row) => row.is_member).length;
+  const reviewCount = tasks.filter((task) => task.status === 'in_review').length;
+  const overdueCount = tasks.filter((task) => isOverdue(task)).length;
+  const taskStats = [
+    { label: 'Tasks', value: tasks.length },
+    { label: 'Completed', value: tasks.filter((task) => task.status === 'completed').length },
+    { label: 'Awaiting review', value: reviewCount, tone: reviewCount ? 'warn' : '' },
+    { label: 'Overdue', value: overdueCount, tone: overdueCount ? 'danger' : '' },
+  ];
+  const projectHref = (item) => `${isManager ? '/manager' : '/employee'}/project?id=${item.id}`;
 
   return (
     <>
-      <Banner message={message} isError={isError} />
-      <a href={backLink}>← Back</a>
+      {isManager && (
+        <HeaderActions>
+          <button className="ws-btn ws-btn-secondary" type="button" onClick={() => setEditing(true)}>
+            <Icon name="edit" size={15} />
+            Edit project
+          </button>
+          <button className="ws-btn ws-btn-primary" type="button" onClick={() => setPanel({ type: 'form', task: null })}>
+            <Icon name="plus" size={15} />
+            Add task
+          </button>
+        </HeaderActions>
+      )}
 
-      <section className="dashboard-panel">
-        <div className="dashboard-toolbar">
-          <div>
-            <h2>{project.name}</h2>
-            <p className="description">{project.description || 'No description yet.'}</p>
-            <p className="description">Managed by {project.manager}</p>
-          </div>
-          {isManager && (
-            <div className="button-row">
-              <button className="secondary-button" type="button" onClick={() => setEditing(!editing)}>
-                {editing ? 'Cancel' : 'Edit project'}
-              </button>
-              <a className="button button-primary" href={`/manager/tasks?project=${project.id}`}>Add task</a>
-            </div>
-          )}
+      <Banner message={banner.message} isError={banner.isError} onClose={clear} />
+
+      <section className="ws-card ws-project-head">
+        <div>
+          <h2>{project.name}</h2>
+          <p className="ws-project-desc">{project.description || 'No description yet.'}</p>
+          <p className="ws-meta">Managed by {project.manager} · Created {formatDate(project.created_at)}</p>
         </div>
         <ProgressBar progress={project.progress} />
-
-        {editing && (
-          <form className="task-form" onSubmit={saveProject}>
-            <label>
-              Project name
-              <input value={name} onChange={(event) => setName(event.target.value)} maxLength={255} />
-            </label>
-            <label className="wide">
-              Description
-              <textarea rows={3} value={description} onChange={(event) => setDescription(event.target.value)} />
-            </label>
-            <button className="button button-primary" type="submit">Save changes</button>
-          </form>
-        )}
       </section>
 
-      <section className="dashboard-panel">
-        <h2>Project tasks</h2>
-        {project.tasks.length === 0 ? (
-          <div className="empty-state">This project has no tasks yet.</div>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr><th>Title</th><th>Assignee</th><th>Due</th><th>Priority</th><th>Status</th></tr>
-              </thead>
-              <tbody>
-                {project.tasks.map((task) => (
-                  <tr key={task.id}>
-                    <td>{task.title}</td>
-                    <td>{task.assignee.name}</td>
-                    <td>{task.due_date}</td>
-                    <td><PriorityBadge priority={task.priority} /></td>
-                    <td><StatusBadge status={task.status} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      <Stats items={taskStats} />
 
       {isManager && (
-        <section className="dashboard-panel">
-          <h2>Who can see this project</h2>
-          <p className="description">
-            Full visibility lets an employee view this project and all its tasks (read only).
-            Assigned tasks only lets them see just the tasks given to them.
-          </p>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr><th>Employee</th><th>Visibility</th></tr>
-              </thead>
-              <tbody>
-                {access.map((row) => (
-                  <tr key={row.employee_id}>
-                    <td>{row.name}</td>
-                    <td>
-                      <select value={row.mode} onChange={(event) => changeMode(row.employee_id, event.target.value)}>
-                        <option value="assigned_only">Assigned tasks only</option>
-                        <option value="full">Full project visibility</option>
-                      </select>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <Tabs
+          active={tab}
+          onChange={setTab}
+          tabs={[['tasks', 'Tasks', tasks.length], ['members', 'Members', memberCount]]}
+        />
+      )}
+
+      {tab === 'tasks' && (
+        tasks.length === 0 ? (
+          <div className="ws-card">
+            <EmptyState
+              title="This project has no tasks yet"
+              action={isManager ? <button className="ws-btn ws-btn-primary" type="button" onClick={() => setPanel({ type: 'form', task: null })}>Add the first task</button> : null}
+            >
+              Tasks added to this project will appear here.
+            </EmptyState>
           </div>
+        ) : (
+          <TaskTable tasks={tasks} showProject={false} selectedId={selected ? selected.id : null} onOpen={(task) => setPanel({ type: 'view', id: task.id })} />
+        )
+      )}
+
+      {isManager && tab === 'members' && (
+        <section className="ws-card">
+          <div className="ws-card-head">
+            <h3>Who can see this project</h3>
+            <p>
+              Members see the whole project and every task in it. Other employees only see the tasks
+              assigned to them.
+            </p>
+          </div>
+          {members.length === 0 ? (
+            <EmptyState icon="users" title="No employees in your department yet" />
+          ) : (
+            <ul className="ws-member-list">
+              {members.map((row) => (
+                <li key={row.employee_id} className="ws-member-row">
+                  <span className="ws-person"><Avatar name={row.name} size={28} />{row.name}</span>
+                  <span className="ws-member-state">{row.is_member ? 'Full project access' : 'Assigned tasks only'}</span>
+                  <Switch
+                    checked={row.is_member}
+                    disabled={savingMember === row.employee_id}
+                    label={`${row.name} can see the whole project`}
+                    onChange={(value) => toggleMember(row, value)}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
+      )}
+
+      {selected && (
+        <Drawer title="Task details" onClose={() => setPanel(null)}>
+          <TaskPanel
+            task={selected}
+            role={role}
+            projectHref={projectHref}
+            onEdit={isManager ? () => setPanel({ type: 'form', task: selected }) : undefined}
+            onReview={actions.review}
+            onAdvance={actions.advance}
+          />
+        </Drawer>
+      )}
+
+      {isManager && panel && panel.type === 'form' && (
+        <Drawer title={panel.task ? 'Edit task' : 'Add task'} onClose={() => setPanel(panel.task ? { type: 'view', id: panel.task.id } : null)}>
+          <TaskForm
+            task={panel.task}
+            projects={[{ id: project.id, name: project.name }]}
+            lockedProjectId={project.id}
+            employees={employees}
+            onSubmit={async (body) => {
+              await actions.save(panel.task, body);
+              setPanel(panel.task ? { type: 'view', id: panel.task.id } : null);
+            }}
+            onCancel={() => setPanel(panel.task ? { type: 'view', id: panel.task.id } : null)}
+          />
+        </Drawer>
+      )}
+
+      {editing && (
+        <Modal title="Edit project" onClose={() => setEditing(false)}>
+          <ProjectForm project={project} onSubmit={saveProject} onCancel={() => setEditing(false)} />
+        </Modal>
       )}
     </>
   );
 }
 
 export default function ProjectDetails({ role }) {
+  const crumbs = role === 'Manager'
+    ? [['Projects', '/manager/projects'], ['Project details']]
+    : [['My tasks', '/employee/tasks'], ['Project details']];
   return (
-    <Shell role={role} title="Project details">
+    <Shell role={role} title="Project details" breadcrumbs={crumbs}>
       <DetailsContent role={role} />
     </Shell>
   );
