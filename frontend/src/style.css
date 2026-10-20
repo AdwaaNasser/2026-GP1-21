@@ -2231,3 +2231,10 @@ tr:last-child td {
   .ws-member-row .ws-progress { width: 140px; }
 }
 .ws-icon { flex: none; }
+.ws-app.hr-employees-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-height: auto;
+  background: transparent;
+}

@@ -8,6 +8,7 @@ import Login from './Login.jsx';
 import ManagerProjects from './ManagerProjects.jsx';
 import ManagerTasks from './ManagerTasks.jsx';
 import OrgSetup from './OrgSetup.jsx';
+import HrEmployees from './HrEmployees.jsx';
 import ProjectDetails from './ProjectDetails.jsx';
 import './style.css';
 
@@ -23,6 +24,7 @@ const pages = {
   '/manager/project': () => <ProjectDetails role="Manager" />,
   '/manager/tasks': ManagerTasks,
   '/employee/tasks': EmployeeTasks,
+  '/hr/employees': HrEmployees,
   '/employee/project': () => <ProjectDetails role="Employee" />,
 };
 const Page = pages[window.location.pathname] || Home;

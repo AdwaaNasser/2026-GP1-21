@@ -178,6 +178,7 @@ function HrDashboard({ role }) {
             <a className="active" href={dashboardPath(role)}>Overview</a>
             <a href="#overview">Dashboards</a>
             <a href="#team">People</a>
+            <a href="/hr/employees">Manage employees</a>
             <a href="#import">Import team</a>
             <a href="/" onClick={(event) => { event.preventDefault(); logout(); }}>Sign out</a>
           </nav>
