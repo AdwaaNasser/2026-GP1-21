@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiRequest, clearLogin, getLogin, responseData } from './api.js';
 
-const BATCH_KEY = 'bayyinahCsvImport';
+const BATCH_KEY = 'bayyinahCsvImportV2';
 
 function dashboardPath(role) {
   if (role === 'HR' || role === 'HR Professional') return '/dashboard/hr';
@@ -90,17 +90,25 @@ export default function Dashboard({ role }) {
   }
 
   async function inviteAll() {
-    if (!batch?.batch_id || batch.invitations?.remaining === 0) return;
+    if (!batch?.pending_invitation_ids?.length) return;
     setIsBusy(true);
     setMessage('');
     setIsError(false);
     try {
       const response = await apiRequest(
-        `/api/accounts/import-csv/${batch.batch_id}/invite-all/`,
-        { method: 'POST' },
+        '/api/accounts/import-csv/invite-all/',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ employee_ids: batch.pending_invitation_ids }),
+        },
       );
       const result = await responseData(response);
-      const updatedBatch = { ...batch, invitations: result };
+      const updatedBatch = {
+        ...batch,
+        invitations: result,
+        pending_invitation_ids: result.remaining_ids,
+      };
       setBatch(updatedBatch);
       sessionStorage.setItem(BATCH_KEY, JSON.stringify(updatedBatch));
       setMessage(result.message);

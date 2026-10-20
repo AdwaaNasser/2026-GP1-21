@@ -4,7 +4,7 @@ Bayyinah is a people-management and employee-onboarding application with role-aw
 
 ## Project structure
 
-- `accounts/` — account, organization, department, invitation, and employee features, including management commands and migrations.
+- `accounts/` — accounts, employee roles, CSV onboarding, invitations, password resets, and database models.
 - `bayyinah_backend/` — Django project settings and URL configuration.
 - `frontend/` — React interface and Vite configuration.
 - `Logo.PNG` — Bayyinah brand logo.
@@ -36,14 +36,38 @@ $env:BAYYINAH_DB_HOST = "localhost"
 $env:BAYYINAH_DB_PORT = "5432"
 ```
 
-Configure email delivery only if you are testing invitation emails:
+Configure email delivery to test employee invitations and password-reset emails:
 
 ```powershell
 $env:BAYYINAH_EMAIL_HOST_USER = Read-Host "Email address used to send invitations"
 $env:BAYYINAH_EMAIL_APP_PASSWORD = Read-Host "Email app password"
 ```
 
-The existing PostgreSQL `employee` and `department` tables are part of the project's legacy database schema and must exist in the local database. The tracked Django migrations add the organization and onboarding tables; they do not contain employee records or database credentials.
+Users can request a password-reset link from the login page. Invitation and reset
+links use signed, time-limited tokens tied to the user's account; no invitation-token
+or CSV-batch tables are needed.
+
+The initial migration creates the business tables in the submitted schema:
+`organization`, `"User"`, `employee`, `manager`, `project`, `task`, `skills`,
+`employee_skills`, `task_skills`, `attendancerecord`, `leavetype`, `leaverequest`,
+`meetingschedule`, `goal`, `task_goal`, `evaluation`, `predictionfactor`, and
+`burnoutsurvey`, and `burnoutprediction`. PostgreSQL generates the single-column
+integer IDs.
+`BurnoutSurvey` has no PredictionFactor relationship because its schema has no
+factor-name column.
+
+Passwords must be at least 8 characters, include an uppercase letter and a number,
+and pass Django's common-password and user-similarity checks. Password resets cannot
+reuse the current password.
+
+Django and SimpleJWT also require a few framework bookkeeping and authentication
+tables when migrations run. These are not additional Bayyinah business tables.
+
+**Important:** The old account migrations have been replaced for the new schema.
+Back up any existing database before switching. Applying the new initial migration
+to the old database is not a safe data-preserving upgrade; it is intended for a
+new, empty database after you explicitly decide to reset the old one. The migration
+does not import existing employee data.
 
 Run the migrations and start Django:
 
@@ -78,6 +102,6 @@ npm run build
 
 ## Database and privacy
 
-Commit the Django models and migrations to share the database structure. Local database files, SQL exports, password hashes, invitation tokens, and credentials are intentionally excluded. Create a separate PostgreSQL database for each developer and configure its connection through environment variables.
+Commit the Django models and migrations to share the database structure. Local database files, SQL exports, password hashes, invitation links, and credentials are intentionally excluded. Create a separate PostgreSQL database for each developer and configure its connection through environment variables.
 
 The example addresses in automated tests are placeholders; do not use real employee data in tests or commit database exports containing personal information.

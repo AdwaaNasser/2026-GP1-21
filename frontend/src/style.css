@@ -673,6 +673,24 @@ a {
   font-weight: 650;
 }
 
+.password-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.password-label-row a {
+  margin-top: 10px;
+  color: var(--purple);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.password-label-row a:hover {
+  text-decoration: underline;
+}
+
 .auth-card input {
   width: 100%;
   min-height: 46px;

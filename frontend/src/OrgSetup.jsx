@@ -67,12 +67,13 @@ export default function OrgSetup() {
           <div className="form-two-columns">
             <div>
               <label htmlFor="setup-password">Create password</label>
-              <input id="setup-password" type="password" autoComplete="new-password" value={form.password} onChange={(event) => update('password', event.target.value)} required />
+              <input id="setup-password" type="password" autoComplete="new-password" minLength="8" value={form.password} onChange={(event) => update('password', event.target.value)} required />
             </div>
             <div>
               <label htmlFor="confirm-password">Confirm password</label>
               <input id="confirm-password" type="password" autoComplete="new-password" value={form.confirm_password} onChange={(event) => update('confirm_password', event.target.value)} required />
             </div>
+            <p className="auth-description">Use at least 8 characters, including one uppercase letter and one number. Avoid common passwords.</p>
           </div>
           <button className="button button-primary auth-submit" type="submit" disabled={isSubmitting}>
             {isSubmitting ? 'Creating workspace…' : 'Create organization'}

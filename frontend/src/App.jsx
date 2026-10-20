@@ -16,7 +16,9 @@ function errorMessage(data) {
 }
 
 export default function App() {
-  const token = new URLSearchParams(window.location.search).get('token') || '';
+  const params = new URLSearchParams(window.location.search);
+  const uid = params.get('uid') || '';
+  const token = params.get('token') || '';
   const [password, setPassword] = useState('');
   const [confirmation, setConfirmation] = useState('');
   const [message, setMessage] = useState('');
@@ -28,9 +30,9 @@ export default function App() {
     event.preventDefault();
     setMessage('');
 
-    if (!token) {
+    if (!uid || !token) {
       setIsError(true);
-      setMessage('This invitation link is missing its token. Ask HR to send a new invite.');
+      setMessage('This invitation link is incomplete. Ask HR to send a new invite.');
       return;
     }
 
@@ -45,7 +47,7 @@ export default function App() {
       const response = await fetch('/api/accounts/set-password/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, password }),
+        body: JSON.stringify({ uid, token, password }),
       });
       const data = await response.json();
       if (!response.ok) {
@@ -85,7 +87,7 @@ export default function App() {
             </p>
             {!token && (
               <p className="notice error" role="alert">
-                This invitation link is missing its token. Ask HR to send a new invite.
+                This invitation link is incomplete. Ask HR to send a new invite.
               </p>
             )}
             {message && (
@@ -99,10 +101,12 @@ export default function App() {
                 id="password"
                 type="password"
                 autoComplete="new-password"
+                minLength="8"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 required
               />
+              <p className="auth-description">Use at least 8 characters, including one uppercase letter and one number. Avoid common passwords.</p>
               <label htmlFor="confirmation">Confirm password</label>
               <input
                 id="confirmation"
@@ -112,7 +116,7 @@ export default function App() {
                 onChange={(event) => setConfirmation(event.target.value)}
                 required
               />
-              <button className="button button-primary auth-submit" type="submit" disabled={isSubmitting || !token}>
+              <button className="button button-primary auth-submit" type="submit" disabled={isSubmitting || !uid || !token}>
                 {isSubmitting ? 'Saving password…' : 'Set password'}
               </button>
             </form>

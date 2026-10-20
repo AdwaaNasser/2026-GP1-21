@@ -44,7 +44,7 @@ export async function apiRequest(path, options = {}) {
     throw new Error('Your session ended. Please sign in again.');
   }
 
-  const refreshResponse = await fetch('/api/token/refresh/', {
+  const refreshResponse = await fetch('/api/accounts/token/refresh/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ refresh }),

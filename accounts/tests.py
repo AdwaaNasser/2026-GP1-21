@@ -2,26 +2,114 @@ from contextlib import nullcontext
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from django.conf import settings
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase
 from rest_framework.test import APIRequestFactory, force_authenticate
+from rest_framework_simplejwt.tokens import RefreshToken
 
+from .models import (
+    AttendanceRecord,
+    BurnoutPrediction,
+    BurnoutSurvey,
+    Employee,
+    EmployeeSkill,
+    Evaluation,
+    Goal,
+    LeaveRequest,
+    LeaveType,
+    Manager,
+    MeetingSchedule,
+    Organization,
+    PredictionFactor,
+    Project,
+    Skill,
+    Task,
+    TaskGoal,
+    TaskSkill,
+    User,
+)
 from .permissions import IsHRProfessional
 from .views import (
     CSVEmployeeImportView,
     CSVImportInviteAllView,
-    EmployeeDetailView,
     LoginView,
+    PasswordResetConfirmView,
+    PasswordResetRequestView,
+    OrganizationSetupSerializer,
     SetPasswordView,
+    _change_password,
     _employees_visible_to,
-    _new_hr_department_name,
-    _normalize_csv_header,
+    _send_invitation_email,
+    _send_password_reset_email,
 )
 
 
-class RoleAccessTests(SimpleTestCase):
+class SchemaTests(SimpleTestCase):
+    def test_models_match_the_supplied_business_tables(self):
+        expected = {
+            'organization',
+            '"User"',
+            'employee',
+            'manager',
+            'project',
+            'task',
+            'skills',
+            'employee_skills',
+            'task_skills',
+            'attendancerecord',
+            'leavetype',
+            'leaverequest',
+            'meetingschedule',
+            'goal',
+            'task_goal',
+            'evaluation',
+            'predictionfactor',
+            'burnoutsurvey',
+            'burnoutprediction',
+        }
+        models = (
+            Organization,
+            User,
+            Employee,
+            Manager,
+            Project,
+            Task,
+            Skill,
+            EmployeeSkill,
+            TaskSkill,
+            AttendanceRecord,
+            LeaveType,
+            LeaveRequest,
+            MeetingSchedule,
+            Goal,
+            TaskGoal,
+            Evaluation,
+            PredictionFactor,
+            BurnoutSurvey,
+            BurnoutPrediction,
+        )
+        self.assertEqual({model._meta.db_table for model in models}, expected)
+
+    def test_burnout_survey_has_no_prediction_factor_relationship(self):
+        field_names = {field.name for field in BurnoutSurvey._meta.get_fields()}
+        self.assertNotIn('factor_name', field_names)
+        self.assertIn('contribution', {field.name for field in PredictionFactor._meta.fields})
+
+
+class AccountApiTests(SimpleTestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
+
+    def hr_user(self):
+        return SimpleNamespace(
+            is_authenticated=True,
+            role='HR',
+            org_id=12,
+            org=SimpleNamespace(pk=12),
+            department='People',
+        )
 
     def test_hr_permission_requires_authenticated_hr_role(self):
         permission = IsHRProfessional()
@@ -34,96 +122,37 @@ class RoleAccessTests(SimpleTestCase):
         self.assertFalse(permission.has_permission(SimpleNamespace(user=manager), view))
         self.assertFalse(permission.has_permission(SimpleNamespace(user=anonymous), view))
 
-    def test_employee_queries_are_scoped_by_role(self):
-        department = SimpleNamespace(organization_id=12)
+    def test_employee_visibility_is_scoped_by_role(self):
         cases = (
-            (SimpleNamespace(role='HR', department=department), {'department__organization_id': 12}),
-            (SimpleNamespace(role='Manager', department_id=7), {'department_id': 7}),
-            (SimpleNamespace(role='Employee', pk=9), {'pk': 9}),
+            (
+                SimpleNamespace(role='HR', org_id=12, pk=1),
+                {'org_id': 12},
+            ),
+            (
+                SimpleNamespace(role='Manager', org_id=12, department='People', pk=2),
+                {'org_id': 12, 'department': 'People'},
+            ),
+            (
+                SimpleNamespace(role='Employee', org_id=12, pk=3),
+                {'user_id': 3},
+            ),
         )
 
         for user, expected_filter in cases:
             with self.subTest(role=user.role):
-                with patch('accounts.views.SystemUser.objects.filter') as filter_users:
+                with patch('accounts.views.User.objects.filter') as filter_users:
                     result = _employees_visible_to(user)
-
-                filter_users.assert_called_once_with(**expected_filter)
-                filter_users.return_value.select_related.assert_called_once_with('department')
-                self.assertIs(result, filter_users.return_value.select_related.return_value)
-
-    def test_non_hr_cannot_upload_csv(self):
-        request = self.factory.post('/api/accounts/import-csv/', {}, format='multipart')
-        force_authenticate(
-            request,
-            user=SimpleNamespace(is_authenticated=True, role='Manager'),
-        )
-
-        response = CSVEmployeeImportView.as_view()(request)
-
-        self.assertEqual(response.status_code, 403)
-
-    def test_employee_cannot_patch_employee_records(self):
-        request = self.factory.patch(
-            '/api/accounts/employees/4/',
-            {'first_name': 'Changed'},
-            format='json',
-        )
-        force_authenticate(
-            request,
-            user=SimpleNamespace(is_authenticated=True, role='Employee'),
-        )
-        with patch.object(EmployeeDetailView, 'get_object') as get_object:
-            response = EmployeeDetailView.as_view()(request, employee_id=4)
-
-        self.assertEqual(response.status_code, 403)
-        get_object.assert_not_called()
-
-    def test_manager_cannot_change_employee_role(self):
-        request = self.factory.patch(
-            '/api/accounts/employees/4/',
-            {'role': 'HR'},
-            format='json',
-        )
-        force_authenticate(
-            request,
-            user=SimpleNamespace(
-                is_authenticated=True,
-                role='Manager',
-                department_id=7,
-                department=SimpleNamespace(organization_id=12),
-            ),
-        )
-        employee = MagicMock()
-
-        with patch.object(EmployeeDetailView, 'get_object', return_value=employee):
-            response = EmployeeDetailView.as_view()(request, employee_id=4)
-
-        self.assertEqual(response.status_code, 400)
-        employee.save.assert_not_called()
-
-
-class OnboardingApiTests(SimpleTestCase):
-    def setUp(self):
-        self.factory = APIRequestFactory()
-
-    def hr_user(self):
-        organization = SimpleNamespace(pk=12)
-        department = SimpleNamespace(organization_id=12, organization=organization)
-        return SimpleNamespace(
-            is_authenticated=True,
-            role='HR',
-            department_id=7,
-            department=department,
-        )
-
-    def test_new_organization_gets_a_unique_hr_department_name(self):
-        organization = SimpleNamespace(name='Acme')
-        with patch('accounts.views.Department.objects.filter') as filter_departments:
-            filter_departments.return_value.exists.side_effect = [True, False]
-
-            department_name = _new_hr_department_name(organization)
-
-        self.assertEqual(department_name, 'Human Resources - Acme (2)')
+                filter_users.return_value.select_related.assert_called_once_with(
+                    'employee_record',
+                    'org',
+                )
+                filter_users.return_value.select_related.return_value.filter.assert_called_once_with(
+                    **expected_filter,
+                )
+                self.assertIs(
+                    result,
+                    filter_users.return_value.select_related.return_value.filter.return_value,
+                )
 
     def test_login_rejects_invalid_credentials(self):
         request = self.factory.post(
@@ -131,255 +160,184 @@ class OnboardingApiTests(SimpleTestCase):
             {'email': 'person@example.com', 'password': 'incorrect'},
             format='json',
         )
-
         with patch('accounts.views.authenticate', return_value=None):
             response = LoginView.as_view()(request)
-
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.data['detail'], 'Invalid email or password.')
 
-    def test_login_returns_tokens_and_role(self):
+    def test_login_rejects_invalid_email_format(self):
         request = self.factory.post(
             '/api/accounts/login/',
-            {'email': 'person@example.com', 'password': 'correct-password'},
+            {'email': 'not-an-email', 'password': 'SomePassword1'},
             format='json',
         )
+        response = LoginView.as_view()(request)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('email', response.data)
+
+    def test_password_requires_uppercase_letter_and_number(self):
+        serializer = OrganizationSetupSerializer()
+        with self.assertRaises(DjangoValidationError) as no_uppercase:
+            serializer.validate_password('lowercase123')
+        self.assertIn('uppercase', str(no_uppercase.exception).lower())
+
+        with self.assertRaises(DjangoValidationError) as no_number:
+            serializer.validate_password('UppercaseOnly')
+        self.assertIn('number', str(no_number.exception).lower())
+
+    def test_password_reset_rejects_the_current_password(self):
+        user = MagicMock()
+        user.has_usable_password.return_value = True
+        user.check_password.return_value = True
+        data = {'uid': 'NQ', 'token': 'valid', 'password': 'ExistingPassword1'}
+        with (
+            patch('accounts.views._user_from_password_link', return_value=user),
+            patch('accounts.views.validate_password') as validate_password,
+        ):
+            changed_user, error = _change_password(data)
+
+        self.assertIsNone(changed_user)
+        self.assertIn('different', error['password'][0])
+        user.set_password.assert_not_called()
+        validate_password.assert_not_called()
+
+    def test_jwt_uses_the_new_user_primary_key(self):
+        user = User(user_id=27, email='person@example.com', password='password-hash')
+
+        token = RefreshToken.for_user(user)
+
+        self.assertEqual(settings.SIMPLE_JWT['USER_ID_FIELD'], 'user_id')
+        self.assertEqual(token['user_id'], '27')
+
+    def test_password_reset_request_has_same_response_for_unknown_address(self):
+        request = self.factory.post(
+            '/api/accounts/password-reset/',
+            {'email': 'unknown@example.com'},
+            format='json',
+        )
+        with (
+            patch('accounts.views.User.objects.filter') as filter_users,
+            patch('accounts.views._send_password_reset_email') as send_email,
+        ):
+            filter_users.return_value.first.return_value = None
+            response = PasswordResetRequestView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('If an account exists', response.data['detail'])
+        send_email.assert_not_called()
+
+    def test_password_reset_request_sends_message_to_existing_account(self):
+        request = self.factory.post(
+            '/api/accounts/password-reset/',
+            {'email': 'person@example.com'},
+            format='json',
+        )
+        user = SimpleNamespace(email='person@example.com')
+        with (
+            patch('accounts.views.User.objects.filter') as filter_users,
+            patch('accounts.views._send_password_reset_email') as send_email,
+        ):
+            filter_users.return_value.first.return_value = user
+            response = PasswordResetRequestView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        send_email.assert_called_once_with(user)
+
+    def test_reset_email_uses_reset_wording_and_link(self):
         user = SimpleNamespace(
             pk=5,
             email='person@example.com',
-            full_name='Person One',
-            get_role_display=lambda: 'Manager',
+            full_display_name='Person One',
         )
-
-        class TokenPair:
-            access_token = 'access-token'
-
-            def __str__(self):
-                return 'refresh-token'
-
         with (
-            patch('accounts.views.authenticate', return_value=user),
-            patch('accounts.views.RefreshToken.for_user', return_value=TokenPair()),
+            patch('accounts.views.settings.BAYYINAH_FRONTEND_URL', 'http://localhost:5173'),
+            patch('accounts.views.default_token_generator.make_token', return_value='token-value'),
+            patch('accounts.views.send_mail') as send_mail,
         ):
-            response = LoginView.as_view()(request)
+            _send_password_reset_email(user)
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['access'], 'access-token')
-        self.assertEqual(response.data['refresh'], 'refresh-token')
-        self.assertEqual(response.data['user']['role'], 'Manager')
-
-    def test_csv_rejects_rows_with_extra_columns_without_creating_accounts(self):
-        upload = SimpleUploadedFile(
-            'employees.csv',
-            b'email,name,role,department\nperson@example.com,Person One,Employee,Engineering,extra\n',
-            content_type='text/csv',
+        email = send_mail.call_args.kwargs
+        self.assertEqual(email['subject'], 'Password reset requested - Bayyinah')
+        self.assertIn('Here is the link to reset your password:', email['message'])
+        self.assertIn(
+            'http://localhost:5173/reset-password?uid=NQ&token=token-value',
+            email['message'],
         )
-        request = self.factory.post(
-            '/api/accounts/import-csv/',
-            {'file': upload},
-            format='multipart',
-        )
-        force_authenticate(request, user=self.hr_user())
+        self.assertNotIn('You have been added to the Bayyinah HR platform', email['message'])
 
+    def test_invitation_email_uses_account_setup_link(self):
+        user = SimpleNamespace(
+            pk=5,
+            email='person@example.com',
+            full_display_name='Person One',
+        )
         with (
-            patch('accounts.views.SystemUser.objects.filter') as filter_users,
-            patch('accounts.views.Department.objects.create') as create_department,
-            patch('accounts.views.CSVImportBatch.objects.create') as create_batch,
-            patch('accounts.views.transaction.atomic', return_value=nullcontext()),
+            patch('accounts.views.settings.BAYYINAH_FRONTEND_URL', 'http://localhost:5173'),
+            patch('accounts.views.default_token_generator.make_token', return_value='token-value'),
+            patch('accounts.views.send_mail') as send_mail,
         ):
-            create_batch.return_value.pk = 42
-            response = CSVEmployeeImportView.as_view()(request)
+            _send_invitation_email(user)
 
-        self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.data['summary']['total_added'], 0)
-        self.assertEqual(response.data['errors'][0]['row'], 2)
-        filter_users.assert_not_called()
-        create_department.assert_not_called()
-
-    def test_csv_creates_missing_department_and_sends_invitation(self):
-        upload = SimpleUploadedFile(
-            'employees.csv',
-            b'email,name,role,department,job_title\nperson@example.com,Person One,Employee,Engineering,Analyst\n',
-            content_type='text/csv',
+        email = send_mail.call_args.kwargs
+        self.assertIn('finish setting up your account', email['message'])
+        self.assertIn(
+            'http://localhost:5173/set-password?uid=NQ&token=token-value',
+            email['message'],
         )
+        self.assertNotIn('Here is the link to reset your password', email['message'])
+
+    def test_invalid_reset_token_does_not_change_password(self):
         request = self.factory.post(
-            '/api/accounts/import-csv/',
-            {'file': upload},
-            format='multipart',
-        )
-        force_authenticate(request, user=self.hr_user())
-
-        department = MagicMock()
-        employee = MagicMock()
-        record = MagicMock()
-        record.employee.department.name = 'Engineering'
-        record.employee.role = 'Employee'
-        batch = MagicMock(pk=42)
-        batch.records.select_related.return_value.all.return_value = [record]
-        with (
-            patch('accounts.views.Department.objects.filter') as find_department,
-            patch('accounts.views.Department.objects.create', return_value=department) as create_department,
-            patch('accounts.views.SystemUser.objects.filter') as find_user,
-            patch('accounts.views.SystemUser.objects.create_user', return_value=employee) as create_user,
-            patch('accounts.views.CSVImportBatch.objects.create', return_value=batch) as create_batch,
-            patch('accounts.views.CSVImportRecord.objects.create', return_value=record) as create_record,
-            patch('accounts.views.InvitationToken.objects.create') as create_invitation,
-            patch('accounts.views._send_invitation_email') as send_email,
-            patch('accounts.views.transaction.atomic', return_value=nullcontext()),
-        ):
-            find_department.return_value.first.return_value = None
-            find_user.return_value.exists.return_value = False
-
-            response = CSVEmployeeImportView.as_view()(request)
-
-        self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.data['batch_id'], 42)
-        self.assertEqual(response.data['summary']['employees_added'], 1)
-        self.assertEqual(response.data['summary']['managers_added'], 0)
-        self.assertEqual(response.data['summary']['departments'], [
-            {'name': 'Engineering', 'employees': 1, 'managers': 0}
-        ])
-        create_department.assert_called_once_with(
-            name='Engineering',
-            organization=request.user.department.organization,
-        )
-        create_user.assert_called_once()
-        self.assertEqual(create_user.call_args.kwargs['role'], 'Employee')
-        self.assertNotIn('password', create_user.call_args.kwargs)
-        create_batch.assert_called_once()
-        create_record.assert_called_once_with(batch=batch, employee=employee)
-        create_invitation.assert_not_called()
-        send_email.assert_not_called()
-
-    def test_invite_all_sends_only_when_hr_confirms(self):
-        request = self.factory.post(
-            '/api/accounts/import-csv/42/invite-all/',
-            {},
+            '/api/accounts/password-reset/confirm/',
+            {'uid': 'NQ', 'token': 'invalid', 'password': 'Strong-password-2026!'},
             format='json',
         )
-        force_authenticate(request, user=self.hr_user())
-        employee = MagicMock(email='person@example.com')
-        record = MagicMock(employee=employee, status='imported')
-        batch = MagicMock(records=MagicMock())
-        batch.records.filter.return_value.select_related.return_value = [record]
-        batch.records.filter.return_value.count.return_value = 0
-
+        user = MagicMock()
         with (
-            patch('accounts.views.CSVImportBatch.objects.filter') as find_batch,
-            patch('accounts.views.InvitationToken.objects.create', return_value=MagicMock()) as create_invitation,
-            patch('accounts.views._send_invitation_email') as send_email,
-            patch('accounts.views.transaction.atomic', return_value=nullcontext()),
+            patch('accounts.views.urlsafe_base64_decode', return_value=b'5'),
+            patch('accounts.views.User.objects.get', return_value=user),
+            patch('accounts.views.default_token_generator.check_token', return_value=False),
+            patch('accounts.views.validate_password') as validate_password,
         ):
-            find_batch.return_value.first.return_value = batch
-            response = CSVImportInviteAllView.as_view()(request, batch_id=42)
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data['invited'], 1)
-        create_invitation.assert_called_once_with(employee=employee)
-        send_email.assert_called_once()
-
-    def test_csv_saves_manager_employee_and_reporting_relationship(self):
-        upload = SimpleUploadedFile(
-            'employees.csv',
-            (
-                b'email,first_name,last_name,role,department,manager_email\n'
-                b'worker@example.com,Worker,One,Employee,Engineering,manager@example.com\n'
-                b'manager@example.com,Manager,One,Manager,Engineering,\n'
-            ),
-            content_type='text/csv',
-        )
-        request = self.factory.post(
-            '/api/accounts/import-csv/',
-            {'file': upload},
-            format='multipart',
-        )
-        force_authenticate(request, user=self.hr_user())
-
-        department = SimpleNamespace(pk=4, name='Engineering')
-        manager = MagicMock()
-        employee = MagicMock()
-        manager.department = department
-        manager.role = 'Manager'
-        employee.department = department
-        employee.role = 'Employee'
-        manager_record = MagicMock(employee=manager)
-        employee_record = MagicMock(employee=employee)
-        batch = MagicMock(pk=43)
-        batch.records.select_related.return_value.all.return_value = [
-            manager_record,
-            employee_record,
-        ]
-        with (
-            patch('accounts.views.Department.objects.filter') as find_department,
-            patch('accounts.views.Department.objects.create') as create_department,
-            patch(
-                'accounts.views.SystemUser.objects.filter'
-            ) as find_user,
-            patch(
-                'accounts.views.SystemUser.objects.create_user',
-                side_effect=[manager, employee],
-            ) as create_user,
-            patch('accounts.views.CSVImportBatch.objects.create', return_value=batch),
-            patch(
-                'accounts.views.CSVImportRecord.objects.create',
-                side_effect=[manager_record, employee_record],
-            ),
-            patch('accounts.views.InvitationToken.objects.create') as create_invitation,
-            patch('accounts.views._send_invitation_email') as send_email,
-            patch('accounts.views.transaction.atomic', return_value=nullcontext()),
-        ):
-            find_department.return_value.first.return_value = department
-            find_user.return_value.exists.return_value = False
-
-            response = CSVEmployeeImportView.as_view()(request)
-
-        self.assertEqual(response.status_code, 201)
-        self.assertEqual(response.data['summary']['employees_added'], 1)
-        self.assertEqual(response.data['summary']['managers_added'], 1)
-        self.assertEqual(response.data['summary']['departments'], [
-            {'name': 'Engineering', 'employees': 1, 'managers': 1}
-        ])
-        self.assertEqual(create_user.call_args_list[0].kwargs['role'], 'Manager')
-        self.assertEqual(create_user.call_args_list[1].kwargs['manager'], manager)
-        create_department.assert_not_called()
-        create_invitation.assert_not_called()
-        send_email.assert_not_called()
-
-    def test_set_password_requires_string_token_and_password(self):
-        request = self.factory.post(
-            '/api/accounts/set-password/',
-            {'token': ['unexpected'], 'password': 'a-valid-password'},
-            format='json',
-        )
-
-        response = SetPasswordView.as_view()(request)
+            response = PasswordResetConfirmView.as_view()(request)
 
         self.assertEqual(response.status_code, 400)
+        user.set_password.assert_not_called()
+        validate_password.assert_not_called()
 
-    def test_set_password_accepts_token_and_password(self):
+    def test_valid_invitation_token_sets_password(self):
         request = self.factory.post(
             '/api/accounts/set-password/',
-            {'token': 'invitation-token', 'password': 'a-valid-password'},
+            {'uid': 'NQ', 'token': 'valid', 'password': 'Strong-password-2026!'},
             format='json',
         )
-
-        with patch('accounts.views._set_invitation_password') as set_password:
+        with patch(
+            'accounts.views._change_password',
+            return_value=(SimpleNamespace(), None),
+        ) as change_password:
             response = SetPasswordView.as_view()(request)
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['detail'], 'Password set successfully.')
-        set_password.assert_called_once_with('invitation-token', 'a-valid-password')
+        change_password.assert_called_once()
 
-    def test_csv_header_names_are_normalized_to_database_fields(self):
-        self.assertEqual(_normalize_csv_header('System Role'), 'role')
-        self.assertEqual(_normalize_csv_header('departmentid'), 'department_id')
-        self.assertEqual(_normalize_csv_header('Allowed Absence Days'), 'allowed_absence_days')
-        self.assertEqual(_normalize_csv_header('Manager Email'), 'manager_email')
+    def test_non_hr_cannot_import_csv(self):
+        request = self.factory.post(
+            '/api/accounts/import-csv/',
+            {},
+            format='multipart',
+        )
+        force_authenticate(
+            request,
+            user=SimpleNamespace(is_authenticated=True, role='Manager'),
+        )
+        response = CSVEmployeeImportView.as_view()(request)
+        self.assertEqual(response.status_code, 403)
 
-    def test_csv_refuses_password_hash_columns(self):
+    def test_csv_import_adds_account_ids_for_separate_invite_step(self):
         upload = SimpleUploadedFile(
             'employees.csv',
-            b'email,name,role,department,passwordhash\nperson@example.com,Person One,Employee,Engineering,secret\n',
+            b'email,full_name,system_role,department\nperson@example.com,Person One,Employee,People\n',
             content_type='text/csv',
         )
         request = self.factory.post(
@@ -388,26 +346,39 @@ class OnboardingApiTests(SimpleTestCase):
             format='multipart',
         )
         force_authenticate(request, user=self.hr_user())
+        created_user = SimpleNamespace(pk=33)
+        with (
+            patch('accounts.views.User.objects.filter') as filter_users,
+            patch('accounts.views._create_account', return_value=(created_user, MagicMock())),
+            patch('accounts.views.transaction.atomic', return_value=nullcontext()),
+        ):
+            filter_users.return_value.exists.return_value = False
+            response = CSVEmployeeImportView.as_view()(request)
 
-        response = CSVEmployeeImportView.as_view()(request)
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['pending_invitation_ids'], [33])
+        self.assertEqual(response.data['summary']['employees_added'], 1)
+        self.assertEqual(response.data['summary']['departments'][0]['name'], 'People')
 
-        self.assertEqual(response.status_code, 400)
-        self.assertIn('password', response.data['file'].lower())
-
-    def test_csv_refuses_database_generated_employee_ids(self):
-        upload = SimpleUploadedFile(
-            'employees.csv',
-            b'employeeid,email,name,role,department\n1,person@example.com,Person One,Employee,Engineering\n',
-            content_type='text/csv',
-        )
+    def test_invite_all_uses_ids_without_a_batch_table(self):
         request = self.factory.post(
-            '/api/accounts/import-csv/',
-            {'file': upload},
-            format='multipart',
+            '/api/accounts/import-csv/invite-all/',
+            {'employee_ids': [33]},
+            format='json',
         )
         force_authenticate(request, user=self.hr_user())
+        user = MagicMock()
+        user.pk = 33
+        user.org_id = 12
+        user.has_usable_password.return_value = False
+        with (
+            patch('accounts.views.User.objects.filter') as filter_users,
+            patch('accounts.views._send_invitation_email') as send_email,
+        ):
+            filter_users.return_value.first.return_value = user
+            response = CSVImportInviteAllView.as_view()(request)
 
-        response = CSVEmployeeImportView.as_view()(request)
-
-        self.assertEqual(response.status_code, 400)
-        self.assertIn('generated', response.data['file'].lower())
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['invited'], 1)
+        self.assertEqual(response.data['remaining_ids'], [])
+        send_email.assert_called_once_with(user)

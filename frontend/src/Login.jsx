@@ -44,7 +44,10 @@ export default function Login() {
         <form onSubmit={submit}>
           <label htmlFor="login-email">Email address</label>
           <input id="login-email" type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} required />
-          <label htmlFor="login-password">Password</label>
+          <div className="password-label-row">
+            <label htmlFor="login-password">Password</label>
+            <a href="/forgot-password">Forgot your password?</a>
+          </div>
           <input id="login-password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required />
           <button className="button button-primary auth-submit" type="submit" disabled={isSubmitting}>
             {isSubmitting ? 'Signing in…' : 'Log in'}

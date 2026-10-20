@@ -10,15 +10,23 @@ from .views import (
     EmployeeListView,
     EmployeeDetailView,
     SetPasswordView,
+    PasswordResetRequestView,
+    PasswordResetConfirmView,
 )
 
 urlpatterns = [
     path('token/refresh/', TokenRefreshView.as_view(), name='token-refresh'),
     path('setup/', OrganizationSetupView.as_view(), name='organization-setup'),
     path('login/', LoginView.as_view(), name='login'),
+    path('password-reset/', PasswordResetRequestView.as_view(), name='password-reset'),
+    path(
+        'password-reset/confirm/',
+        PasswordResetConfirmView.as_view(),
+        name='password-reset-confirm',
+    ),
     path('import-csv/', CSVEmployeeImportView.as_view(), name='import-csv'),
     path(
-        'import-csv/<int:batch_id>/invite-all/',
+        'import-csv/invite-all/',
         CSVImportInviteAllView.as_view(),
         name='import-csv-invite-all',
     ),

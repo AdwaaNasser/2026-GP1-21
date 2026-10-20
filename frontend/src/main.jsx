@@ -5,6 +5,8 @@ import Dashboard from './Dashboard.jsx';
 import Home from './Home.jsx';
 import Login from './Login.jsx';
 import OrgSetup from './OrgSetup.jsx';
+import ForgotPassword from './ForgotPassword.jsx';
+import ResetPassword from './ResetPassword.jsx';
 import './style.css';
 
 const pages = {
@@ -12,6 +14,8 @@ const pages = {
   '/login': Login,
   '/setup': OrgSetup,
   '/set-password': App,
+  '/forgot-password': ForgotPassword,
+  '/reset-password': ResetPassword,
   '/dashboard/hr': () => <Dashboard role="HR" />,
   '/dashboard/manager': () => <Dashboard role="Manager" />,
   '/dashboard/employee': () => <Dashboard role="Employee" />,
