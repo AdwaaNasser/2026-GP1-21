@@ -74,8 +74,7 @@ class User(AbstractBaseUser):
     REQUIRED_FIELDS = ['org']
 
     class Meta:
-        db_table = 'user'
-
+        db_table = 'bayyinah_user'
     @property
     def role(self):
         try:
@@ -122,12 +121,15 @@ class Employee(models.Model):
     )
     system_role = models.CharField(max_length=100, blank=True, null=True)
     hire_date = models.DateField(blank=True, null=True)
-    service_years = models.DecimalField(
-        max_digits=4,
-        decimal_places=2,
-        blank=True,
-        null=True,
-    )
+
+    manager = models.ForeignKey(
+    'Manager',
+    on_delete=models.SET_NULL,
+    db_column='manager_id',
+    related_name='managed_employees',
+    blank=True,
+    null=True,
+)
 
     class Meta:
         db_table = 'employee'
@@ -177,6 +179,7 @@ class Task(models.Model):
     )
     created_at = models.DateTimeField(blank=True, null=True)
     privacy = models.CharField(max_length=50, blank=True, null=True)
+    status = models.CharField(max_length=50, default='todo')
     project = models.ForeignKey(
         Project,
         on_delete=models.PROTECT,
