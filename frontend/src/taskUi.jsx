@@ -133,7 +133,6 @@ export function useBanner() {
   );
   return { banner, success, failure, clear };
 }
-
 // Employees a manager can assign tasks to.
 export function useEmployees(enabled = true) {
   const [employees, setEmployees] = useState([]);

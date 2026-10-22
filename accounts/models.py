@@ -75,10 +75,13 @@ class User(AbstractBaseUser):
 
     class Meta:
         db_table = 'bayyinah_user'
+
     @property
     def role(self):
+        if hasattr(self, 'manager_record'):
+            return 'Manager'
         try:
-            return self.employee_record.system_role
+            return self.employee_record.system_role   # 'Employee' or 'HR'
         except Employee.DoesNotExist:
             return 'HR'
 
@@ -185,6 +188,8 @@ class Task(models.Model):
         on_delete=models.PROTECT,
         db_column='project_id',
         related_name='tasks',
+        null=True,
+        blank=True
     )
     employee = models.ForeignKey(
         Employee,

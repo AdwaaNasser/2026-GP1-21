@@ -72,7 +72,8 @@ def projects_for(user):
 def tasks_for(user):
     tasks = Task.objects.select_related('project__manager__user', 'employee__user')
     if is_manager(user):
-        return tasks.filter(project__manager_id=user.pk)
+        return tasks.filter(Q(project__manager_id=user.pk) |
+        Q(project__isnull=True))
     if is_employee(user):
         return tasks.filter(
             Q(employee_id=user.pk)
@@ -92,7 +93,10 @@ def task_data(task, user):
         'id': task.pk,
         'title': task.title,
         'description': task.description,
-        'project': {'id': task.project_id, 'name': task.project.title},
+        'project':(
+             {'id': task.project_id, 'name': task.project.title}
+                if task.project else None
+        ),
         'assignee': {'id': task.employee_id, 'name': task.employee.user.full_display_name},
         'start_date': task.start_date,
         'due_date': task.due_date,

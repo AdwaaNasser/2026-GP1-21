@@ -37,9 +37,14 @@ class TaskWriteSerializer(serializers.ModelSerializer):
         ]
 
     def validate_project(self, project):
+        if project is None:
+            return None
+
         manager = self.context['request'].user
         if project.manager_id != manager.pk:
-            raise serializers.ValidationError('Choose one of your own projects.')
+            raise serializers.ValidationError(
+                "You can only create tasks for your own projects."
+            )
         return project
 
     def validate_assignee(self, employee):
