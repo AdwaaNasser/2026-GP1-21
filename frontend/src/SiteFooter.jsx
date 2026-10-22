@@ -1,5 +1,3 @@
-// Public site footer. Same look as the original footer (light, logo on the left),
-// plus a short row of links.
 const LINKS = [
   ['#burnout', 'Burnout insights'],
   ['#about', 'About us'],
