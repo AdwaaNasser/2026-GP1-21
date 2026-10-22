@@ -8,17 +8,30 @@ const LINKS = {
     ['/dashboard/manager', 'Overview', 'layout'],
     ['/manager/projects', 'Projects', 'folder'],
     ['/manager/tasks', 'Tasks', 'tasks'],
+    ['/manager/goals', 'Performance', 'flag'],
   ],
   Employee: [
     ['/dashboard/employee', 'Overview', 'layout'],
     ['/employee/tasks', 'My tasks', 'tasks'],
+    ['/employee/performance', 'Performance', 'flag'],
+  ],
+  HR: [
+    ['/dashboard/hr', 'Overview', 'layout'],
+    ['/dashboard/hr#overview', 'Dashboards', 'folder'],
+    ['/dashboard/hr#team', 'People', 'users'],
+    ['/dashboard/hr#import', 'Import team', 'plus'],
+    ['/hr/performance', 'Performance', 'flag'],
   ],
 };
 
 // The project details page belongs to the Projects menu item.
 function isActive(path) {
   const current = window.location.pathname;
-  return current === path || (path === '/manager/projects' && current === '/manager/project');
+  const [base, hash = ''] = path.split('#');
+  if (current !== base && !(base === '/manager/projects' && current === '/manager/project')) return false;
+  // Links such as /dashboard/hr#team are told apart by the part after the #.
+  if (base !== '/dashboard/hr') return true;
+  return window.location.hash.replace('#', '') === hash;
 }
 
 export function Banner({ message, isError, onClose }) {
@@ -47,8 +60,14 @@ export function HeaderActions({ children }) {
 
 // Page layout shared by the manager and employee workspace screens.
 // It also checks that the person is logged in with the right role.
-export default function Shell({ role, title, breadcrumbs = [], children }) {
+export default function Shell({ role, title, subtitle, breadcrumbs = [], children }) {
   const [login, setLogin] = useState(null);
+  const [, setHash] = useState(window.location.hash);
+  useEffect(() => {
+    const onHash = () => setHash(window.location.hash);
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
 
   useEffect(() => {
     const savedLogin = getLogin();
@@ -56,7 +75,8 @@ export default function Shell({ role, title, breadcrumbs = [], children }) {
       window.location.replace('/login');
       return;
     }
-    if (savedLogin.user.role !== role) {
+    const savedRole = savedLogin.user.role === 'HR Professional' ? 'HR' : savedLogin.user.role;
+    if (savedRole !== role) {
       const home = savedLogin.user.role === 'Manager' ? '/dashboard/manager' : '/dashboard/employee';
       const isHr = savedLogin.user.role === 'HR' || savedLogin.user.role === 'HR Professional';
       window.location.replace(isHr ? '/dashboard/hr' : home);
@@ -115,6 +135,7 @@ export default function Shell({ role, title, breadcrumbs = [], children }) {
               </nav>
             )}
             <h1 className="ws-title">{title}</h1>
+            {subtitle && <p className="ws-subtitle">{subtitle}</p>}
           </div>
           <div className="ws-header-actions" id="ws-header-actions" />
         </header>

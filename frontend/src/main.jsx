@@ -11,6 +11,7 @@ import EmployeeTasks from './EmployeeTasks.jsx';
 import ManagerProjects from './ManagerProjects.jsx';
 import ManagerTasks from './ManagerTasks.jsx';
 import ProjectDetails from './ProjectDetails.jsx';
+import { EmployeePerformance, HRPerformance, ManagerGoals } from './Goals.jsx';
 import './style.css';
 
 
@@ -27,7 +28,10 @@ const pages = {
   '/manager/projects': ManagerProjects,
   '/manager/project': () => <ProjectDetails role="Manager" />,
   '/manager/tasks': ManagerTasks,
+  '/manager/goals': ManagerGoals,
   '/employee/tasks': EmployeeTasks,
+  '/employee/performance': EmployeePerformance,
+  '/hr/performance': HRPerformance,
   '/employee/project': () => <ProjectDetails role="Employee" />,
 };
 

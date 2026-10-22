@@ -338,6 +338,27 @@ class Goal(models.Model):
         db_column='manager_id',
         related_name='goals',
     )
+    # --- KPI fields (added for the goals feature) ---
+    # The old text columns target_outcome / actual_outcome / time_period are
+    # left untouched so no existing data is lost; the numeric values below
+    # are what the KPI calculations use.
+    employee = models.ForeignKey(
+        Employee,
+        on_delete=models.PROTECT,
+        db_column='employee_id',
+        related_name='goals',
+        blank=True,
+        null=True,
+    )
+    evaluation_year = models.PositiveSmallIntegerField(blank=True, null=True)
+    period_start = models.DateField(blank=True, null=True)
+    period_end = models.DateField(blank=True, null=True)
+    target_value = models.DecimalField(
+        max_digits=10, decimal_places=2, blank=True, null=True,
+    )
+    actual_value = models.DecimalField(
+        max_digits=10, decimal_places=2, blank=True, null=True,
+    )
 
     class Meta:
         db_table = 'goal'
@@ -385,9 +406,18 @@ class Evaluation(models.Model):
         blank=True,
         null=True,
     )
+    # One evaluation per employee per year; frozen (is_final) once the year ends.
+    evaluation_year = models.PositiveSmallIntegerField(blank=True, null=True)
+    is_final = models.BooleanField(default=False)
 
     class Meta:
         db_table = 'evaluation'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['employee', 'evaluation_year'],
+                name='one_evaluation_per_employee_per_year',
+            ),
+        ]
 
 
 class PredictionFactor(models.Model):

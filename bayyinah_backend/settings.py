@@ -24,6 +24,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'accounts',
     'workspace',
+    'goals',
 ]
 
 MIDDLEWARE = [

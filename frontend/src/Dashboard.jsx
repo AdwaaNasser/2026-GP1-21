@@ -154,25 +154,8 @@ export default function Dashboard({ role }) {
   const invitationsPending = batch?.invitations?.remaining ?? batch?.summary?.total_added ?? 0;
 
   return (
-    <main className="dashboard">
-      <header className="dashboard-header">
-        <div className="dashboard-heading">
-          <a className="dashboard-brand" href="/" aria-label="Bayyinah home">
-            <img className="dashboard-logo" src="/bayyinah-logo.png" alt="" />
-            <span>Bayyinah</span>
-          </a>
-          <div>
-            <p className="eyebrow">BAYYINAH WORKSPACE</p>
-            <h1>{role === 'HR' ? 'HR Dashboard' : `${role} Dashboard`}</h1>
-            <p className="description">Welcome back, {login.user.full_name}</p>
-          </div>
-        </div>
-        <div className="dashboard-header-actions">
-          <span className="user-chip"><span className="user-avatar">{initials(login.user.full_name)}</span>{login.user.role}</span>
-          <button className="secondary-button" type="button" onClick={logout}>Log out</button>
-        </div>
-      </header>
-
+    <Shell role={role} title={role === 'HR' ? 'HR Dashboard' : `${role} Dashboard`} subtitle={`Welcome back, ${login.user.full_name}`}>
+      <div className="dashboard dashboard-in-shell">
       {message && (
         <div className={`status-banner${isError ? ' error' : ''}`} role="status">
           <span aria-hidden="true">{isError ? '!' : '✓'}</span>
@@ -180,29 +163,7 @@ export default function Dashboard({ role }) {
         </div>
       )}
 
-      <div className={role === 'HR' ? 'dashboard-workspace hr-dashboard-workspace' : 'dashboard-workspace'}>
-        {role === 'HR' ? (
-          <nav className="hr-dashboard-sidebar" aria-label="HR dashboard navigation">
-            <a className="active" href={dashboardPath(role)}>Overview</a>
-            <a href="#overview">Dashboards</a>
-            <a href="#team">People</a>
-            <a href="#import">Import team</a>
-            <a href="/" onClick={(event) => { event.preventDefault(); logout(); }}>Sign out</a>
-          </nav>
-        ) : (
-
-          <nav className="dashboard-subnav" aria-label="Workspace navigation">
-            <a className="active" href={dashboardPath(role)}>Overview</a>
-            {role === 'Manager' && <a href="#team">My department</a>}
-            {role === 'Manager' && <a href="/manager/projects">Projects</a>}
-            {role === 'Manager' && <a href="/manager/tasks">Tasks</a>}
-            {role === 'Employee' && <a href="#team">My profile</a>}
-            {role === 'Employee' && <a href="/employee/tasks">My tasks</a>}
-            <a href="/" onClick={(event) => { event.preventDefault(); logout(); }}>Sign out</a>
-          </nav>
-
-        )}
-
+      <div className="dashboard-workspace">
         <div className="dashboard-content">
         <div className="dashboard-main">
           {role === 'HR' && (
@@ -355,7 +316,8 @@ export default function Dashboard({ role }) {
         </aside>
       </div>
       </div>
-    </main>
+      </div>
+    </Shell>
   );
 }
 
