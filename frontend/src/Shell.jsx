@@ -19,6 +19,7 @@ const LINKS = {
     ['/dashboard/hr', 'Overview', 'layout'],
     ['/dashboard/hr#overview', 'Dashboards', 'folder'],
     ['/dashboard/hr#team', 'People', 'users'],
+    ['/hr/employees', 'Manage employees', 'users'],
     ['/dashboard/hr#import', 'Import team', 'plus'],
     ['/hr/performance', 'Performance', 'flag'],
   ],

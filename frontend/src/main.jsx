@@ -5,6 +5,7 @@ import Dashboard, { DashboardRouter } from './Dashboard.jsx';
 import Home from './Home.jsx';
 import Login from './Login.jsx';
 import OrgSetup from './OrgSetup.jsx';
+import HrEmployees from './HrEmployees.jsx';
 import ForgotPassword from './ForgotPassword.jsx';
 import ResetPassword from './ResetPassword.jsx';
 import EmployeeTasks from './EmployeeTasks.jsx';
@@ -32,6 +33,7 @@ const pages = {
   '/employee/tasks': EmployeeTasks,
   '/employee/performance': EmployeePerformance,
   '/hr/performance': HRPerformance,
+  '/hr/employees': HrEmployees,
   '/employee/project': () => <ProjectDetails role="Employee" />,
 };
 

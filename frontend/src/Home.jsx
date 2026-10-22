@@ -1,16 +1,10 @@
+import SiteHeader from './SiteHeader.jsx';
+import SiteFooter from './SiteFooter.jsx';
+
 export default function Home() {
   return (
     <div className="marketing-page">
-      <header className="site-header">
-        <a className="brand" href="/" aria-label="Bayyinah home">
-          <img className="brand-logo" src="/bayyinah-logo.png" alt="" />
-          <span>Bayyinah <span className="brand-arabic">بينة</span></span>
-        </a>
-        <nav className="site-nav" aria-label="Main navigation">
-          <a className="nav-login" href="/login">Log in</a>
-          <a className="button button-primary button-small" href="/setup">Get started</a>
-        </nav>
-      </header>
+      <SiteHeader />
 
       <main>
         <section className="hero">
@@ -81,10 +75,7 @@ export default function Home() {
         </section>
       </main>
 
-      <footer className="site-footer">
-        <a className="brand footer-brand" href="/" aria-label="Bayyinah home"><img className="brand-logo" src="/bayyinah-logo.png" alt="" /><span>Bayyinah <span className="brand-arabic">بينة</span></span></a>
-        <span>© 2026 Bayyinah Platform. All rights reserved.</span>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

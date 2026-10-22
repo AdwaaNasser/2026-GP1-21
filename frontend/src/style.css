@@ -2683,3 +2683,16 @@ body { background: linear-gradient(180deg, #fbf1e8 0%, #fdf8f3 100%) fixed; }
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: none; }
 }
+
+/* Manage employees (HR): person cell in the table */
+.hr-person { display: flex; align-items: center; gap: 10px; }
+
+/* Landing page header and footer (sticky header with section links) */
+.mk-sticky { position: sticky; top: 0; z-index: 40; background: rgb(251 241 232 / 86%); backdrop-filter: blur(10px); }
+.mk-link { color: var(--muted); font-weight: 600; }
+.mk-footer { flex-wrap: wrap; gap: 14px 32px; padding: 22px 0; }
+.mk-footer-links { display: flex; flex-wrap: wrap; gap: 8px 26px; margin: 0 auto; }
+.mk-footer-links a { color: var(--ink); font-size: 12.5px; font-weight: 600; text-decoration: none; }
+.mk-footer-links a:hover { color: var(--orange); }
+.mk-page { scroll-behavior: smooth; }
+@media (max-width: 980px) { .mk-link { display: none; } }
