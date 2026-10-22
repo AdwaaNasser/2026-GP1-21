@@ -323,9 +323,8 @@ class Goal(models.Model):
         blank=True,
         null=True,
     )
-    target_outcome = models.TextField(blank=True, null=True)
+    # Period code of the goal: annual, Q1-Q4 or M1-M12 (the dates are in period_start/period_end).
     time_period = models.CharField(max_length=100, blank=True, null=True)
-    actual_outcome = models.TextField(blank=True, null=True)
     rating = models.DecimalField(
         max_digits=3,
         decimal_places=2,
@@ -338,10 +337,8 @@ class Goal(models.Model):
         db_column='manager_id',
         related_name='goals',
     )
-    # --- KPI fields (added for the goals feature) ---
-    # The old text columns target_outcome / actual_outcome / time_period are
-    # left untouched so no existing data is lost; the numeric values below
-    # are what the KPI calculations use.
+    # --- KPI fields (goals feature) ---
+    # target_value / actual_value are numbers so progress and rating can be calculated.
     employee = models.ForeignKey(
         Employee,
         on_delete=models.PROTECT,
