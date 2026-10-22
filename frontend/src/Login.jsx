@@ -24,7 +24,6 @@ export default function Login() {
         body: JSON.stringify({ email, password }),
       });
       const login = await responseData(response);
-      console.log('API login user:', login.user);
       saveLogin(login);
       window.location.assign(dashboardForRole(login.user.role));
     } catch (requestError) {
