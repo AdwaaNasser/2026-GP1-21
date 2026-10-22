@@ -49,8 +49,6 @@ export default function Dashboard({ role }) {
       return;
     }
 
-console.log('Saved login user:', savedLogin.user);
-console.log('Saved login role:', savedLogin.user.role);
 
     const actualRole = savedLogin.user.role === 'HR Professional' ? 'HR' : savedLogin.user.role;
     if (actualRole !== role) {
