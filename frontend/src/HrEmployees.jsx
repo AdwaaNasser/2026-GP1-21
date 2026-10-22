@@ -15,6 +15,9 @@ import {
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// One form for two user stories:
+//   story 5 - add a new employee (full name, email, role, department are required)
+//   story 6 - update an employee's information
 function EmployeeForm({ employee, departments, onSubmit, onCancel }) {
   const isEdit = Boolean(employee);
   const [form, setForm] = useState(
@@ -40,6 +43,7 @@ function EmployeeForm({ employee, departments, onSubmit, onCancel }) {
     setForm((current) => ({ ...current, [name]: value }));
   }
 
+  // Same rules as the server, so mistakes are explained before anything is sent.
   function validate() {
     if (isEdit) {
       if (!form.first_name.trim()) return 'First name is required.';
@@ -160,7 +164,7 @@ function EmployeeForm({ employee, departments, onSubmit, onCancel }) {
 
 function EmployeesContent() {
   const { banner, success, failure, clear } = useBanner();
-  const [employees, setEmployees] = useState(null);
+  const [employees, setEmployees] = useState(null); // null while loading
   const [departments, setDepartments] = useState([]);
   const [search, setSearch] = useState('');
   const [adding, setAdding] = useState(false);
@@ -198,6 +202,7 @@ function EmployeesContent() {
     load();
   }
 
+  // Story 7: show the employees that match the search text.
   const shown = useMemo(() => {
     const text = search.trim().toLowerCase();
     if (!text) return employees || [];
@@ -312,6 +317,7 @@ export default function HrEmployees() {
       window.location.replace('/login');
       return;
     }
+    // The login response labels the HR role "HR Professional".
     if (savedLogin.user.role !== 'HR Professional' && savedLogin.user.role !== 'HR') {
       window.location.replace(dashboardPath(savedLogin.user.role));
       return;
@@ -359,7 +365,8 @@ export default function HrEmployees() {
         </nav>
 
         <div className="dashboard-main">
-          <div className="ws-app hr-employees-page">
+          {}
+          <div className="ws-app" style={{ display: 'flex', flexDirection: 'column', gap: '20px', minHeight: 'auto', background: 'transparent' }}>
             <EmployeesContent />
           </div>
         </div>
