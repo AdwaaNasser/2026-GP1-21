@@ -106,7 +106,7 @@ def _freeze(employee, year, goals, rows, score):
     Evaluation.objects.update_or_create(
         employee_id=employee.pk,
         evaluation_year=year,
-        defaults={'date': rules.year_end(year), 'overall_score': score, 'is_final': True},
+        defaults={'overall_score': score, 'is_final': True},
     )
     return score
 

@@ -387,7 +387,6 @@ class TaskGoal(models.Model):
 
 class Evaluation(models.Model):
     evaluation_id = models.AutoField(primary_key=True)
-    date = models.DateField(blank=True, null=True)
     overall_score = models.DecimalField(
         max_digits=5,
         decimal_places=2,
