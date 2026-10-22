@@ -1,5 +1,4 @@
-// Public site header. Same look as the original Bayyinah header (logo on the left,
-// "Log in" and "Get started" on the right) with a few anchor links added.
+
 const LINKS = [
   ['#burnout', 'Burnout insights'],
   ['#how', 'How it works'],
