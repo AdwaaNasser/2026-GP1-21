@@ -317,7 +317,8 @@ class TeamPerformanceView(APIView):
             data = services.performance(employee, year)
             rows.append({
                 'id': employee.pk,
-                'name': employee.user.full_display_name,
+                'first_name': employee.user.first_name or '',
+                'last_name': employee.user.last_name or '',
                 'goal_count': len(data['goals']),
                 'overall_score': data['overall_score'],
                 'is_final': data['is_final'],
@@ -413,3 +414,4 @@ class HRYearsView(APIView):
                 {'year': year, **org_summary(org_id, year, today)} for year in years
             ],
         })
+
