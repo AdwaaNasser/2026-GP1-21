@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { apiRequest, clearLogin, getLogin, responseData } from './api.js';
+import { apiRequest, clearLogin, displayName, getLogin, responseData } from './api.js';
 
 import Shell, { Banner } from './Shell.jsx';
 import {
@@ -152,10 +152,11 @@ export default function Dashboard({ role }) {
   const departmentNames = [...new Set(employees.map((employee) => employee.department.name))];
   const managerCount = employees.filter((employee) => employee.role === 'Manager').length;
   const employeeCount = employees.filter((employee) => employee.role === 'Employee').length;
+  const hrCount = employees.filter((employee) => employee.role === 'HR').length;
   const invitationsPending = batch?.invitations?.remaining ?? batch?.summary?.total_added ?? 0;
 
   return (
-    <Shell role={role} title={role === 'HR' ? 'HR Dashboard' : `${role} Dashboard`} subtitle={`Welcome back, ${login.user.full_name}`}>
+    <Shell role={role} title={role === 'HR' ? 'HR Dashboard' : `${role} Dashboard`} subtitle={`Welcome back, ${displayName(login.user)}`}>
       <div className="dashboard dashboard-in-shell">
       {message && (
         <div className={`status-banner${isError ? ' error' : ''}`} role="status">
@@ -207,12 +208,13 @@ export default function Dashboard({ role }) {
                     <div className="summary-grid">
                       <div><strong>{batch.summary.employees_added}</strong><span>Employees added</span></div>
                       <div><strong>{batch.summary.managers_added}</strong><span>Managers added</span></div>
+                      <div><strong>{batch.summary.hr_added || 0}</strong><span>HR added</span></div>
                       <div><strong>{batch.summary.departments.length}</strong><span>Departments</span></div>
                     </div>
                     <div className="table-wrap">
                       <table>
                         <thead>
-                          <tr><th>Department</th><th>Employees</th><th>Managers</th></tr>
+                          <tr><th>Department</th><th>Employees</th><th>Managers</th><th>HR</th></tr>
                         </thead>
                         <tbody>
                           {batch.summary.departments.map((department) => (
@@ -220,6 +222,7 @@ export default function Dashboard({ role }) {
                               <td>{department.name}</td>
                               <td>{department.employees}</td>
                               <td>{department.managers}</td>
+                              <td>{department.hr || 0}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -292,6 +295,7 @@ export default function Dashboard({ role }) {
               <>
                 <div className="aside-stat"><span>Employees</span><strong>{employeeCount}</strong></div>
                 <div className="aside-stat"><span>Managers</span><strong>{managerCount}</strong></div>
+                <div className="aside-stat"><span>HR</span><strong>{hrCount}</strong></div>
                 <div className="aside-stat"><span>Departments</span><strong>{departmentNames.length}</strong></div>
                 <div className="aside-stat"><span>Awaiting invite</span><strong>{invitationsPending}</strong></div>
               </>
@@ -336,7 +340,7 @@ function EmployeeTable({ employees }) {
         <tbody>
           {employees.map((employee) => (
             <tr key={employee.id}>
-              <td>{employee.full_name}</td>
+              <td>{displayName(employee)}</td>
               <td>{employee.email}</td>
               <td><span className={`table-role${employee.role === 'Manager' ? ' manager' : ''}`}>{employee.role}</span></td>
               <td>{employee.department.name}</td>
@@ -362,7 +366,7 @@ function TaskList({ tasks, href, empty }) {
         <li key={task.id}>
           <a className="ws-plain-link" href={href(task)}>
             <span className="ws-mini-title">{task.title}</span>
-            <span className="ws-mini-meta">{task.assignee.name} · {isOverdue(task) ? 'overdue since ' : 'due '}{formatDate(task.due_date)}</span>
+            <span className="ws-mini-meta">{displayName(task.assignee)} · {isOverdue(task) ? 'overdue since ' : 'due '}{formatDate(task.due_date)}</span>
           </a>
           <StatusBadge status={task.status} />
         </li>
@@ -382,7 +386,7 @@ function PeopleTable({ people }) {
         <tbody>
           {people.map((person) => (
             <tr key={person.id}>
-              <td className="ws-task-title">{person.full_name}</td>
+              <td className="ws-task-title">{displayName(person)}</td>
               <td>{person.email}</td>
               <td>{person.role}</td>
               <td>{person.department.name}</td>
