@@ -11,11 +11,12 @@ import {
   sendJson,
   useBanner,
 } from './taskUi.jsx';
+import { displayName } from './api.js';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 
-//  add a new employee 
+//  add a new employee
 //   update an employee's information
 function EmployeeForm({ employee, departments, onSubmit, onCancel }) {
   const isEdit = Boolean(employee);
@@ -29,7 +30,8 @@ function EmployeeForm({ employee, departments, onSubmit, onCancel }) {
           department_id: String(employee.department.id),
         }
       : {
-          full_name: '',
+          first_name: '',
+          last_name: '',
           email: '',
           role: 'Employee',
           department_id: departments.length === 1 ? String(departments[0].id) : '',
@@ -42,13 +44,13 @@ function EmployeeForm({ employee, departments, onSubmit, onCancel }) {
     setForm((current) => ({ ...current, [name]: value }));
   }
 
- 
   function validate() {
     if (isEdit) {
       if (!form.first_name.trim()) return 'First name is required.';
       if (!form.hire_date) return 'Hire date is required.';
     } else {
-      if (!form.full_name.trim()) return 'Full name is required.';
+      if (!form.first_name.trim()) return 'First name is required.';
+      if (!form.last_name.trim()) return 'Last name is required.';
       if (!form.email.trim()) return 'Email is required.';
       if (!EMAIL_PATTERN.test(form.email.trim())) return 'Enter a valid email address.';
     }
@@ -76,7 +78,8 @@ function EmployeeForm({ employee, departments, onSubmit, onCancel }) {
               department_id: Number(form.department_id),
             }
           : {
-              full_name: form.full_name.trim(),
+              first_name: form.first_name.trim(),
+              last_name: form.last_name.trim(),
               email: form.email.trim(),
               role: form.role,
               department_id: Number(form.department_id),
@@ -117,10 +120,16 @@ function EmployeeForm({ employee, departments, onSubmit, onCancel }) {
         </>
       ) : (
         <>
-          <label className="ws-field">
-            <span className="ws-label">Full name</span>
-            <input className="ws-input" value={form.full_name} maxLength={200} autoFocus onChange={(e) => setField('full_name', e.target.value)} />
-          </label>
+          <div className="ws-form-grid">
+            <label className="ws-field">
+              <span className="ws-label">First name</span>
+              <input className="ws-input" value={form.first_name} maxLength={255} autoFocus onChange={(e) => setField('first_name', e.target.value)} />
+            </label>
+            <label className="ws-field">
+              <span className="ws-label">Last name</span>
+              <input className="ws-input" value={form.last_name} maxLength={255} onChange={(e) => setField('last_name', e.target.value)} />
+            </label>
+          </div>
           <div className="ws-form-grid">
             <label className="ws-field">
               <span className="ws-label">Email</span>
@@ -206,7 +215,7 @@ function EmployeesContent() {
     const text = search.trim().toLowerCase();
     if (!text) return employees || [];
     return (employees || []).filter((person) =>
-      `${person.full_name} ${person.email} ${person.job_title || ''} ${person.department.name} ${person.role}`
+      `${displayName(person)} ${person.email} ${person.job_title || ''} ${person.department.name} ${person.role}`
         .toLowerCase()
         .includes(text),
     );
@@ -260,9 +269,9 @@ function EmployeesContent() {
                 <tr key={person.id}>
                   <td>
                     <div className="hr-person">
-                      <Avatar name={person.full_name} size={28} />
+                      <Avatar name={displayName(person)} size={28} />
                       <div>
-                        <div className="ws-task-title">{person.full_name}</div>
+                        <div className="ws-task-title">{displayName(person)}</div>
                         <div className="ws-task-sub">{person.email}</div>
                       </div>
                     </div>
@@ -290,7 +299,7 @@ function EmployeesContent() {
         </Modal>
       )}
       {editing && (
-        <Modal title={`Edit ${editing.full_name}`} onClose={() => setEditing(null)}>
+        <Modal title={`Edit ${displayName(editing)}`} onClose={() => setEditing(null)}>
           <EmployeeForm employee={editing} departments={departments} onSubmit={updateEmployee} onCancel={() => setEditing(null)} />
         </Modal>
       )}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { displayName } from './api.js';
 import Shell, { Banner, HeaderActions } from './Shell.jsx';
 import {
   Drawer,
@@ -147,7 +148,7 @@ function DetailsContent({ role }) {
             {project.description || 'No description yet.'}
           </p>
           <p className="ws-meta">
-            Managed by {project.manager}
+            Managed by {displayName(project.manager)}
           </p>
         </div>
         <ProgressBar progress={project.progress} />

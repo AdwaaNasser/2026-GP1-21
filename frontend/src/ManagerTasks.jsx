@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { displayName } from './api.js';
 import Shell, { Banner, HeaderActions } from './Shell.jsx';
 import {
   DEFAULT_FILTERS,
@@ -113,7 +114,7 @@ function TasksContent() {
         </select>
         <select className="ws-select ws-select-sm" value={filters.assignee} onChange={(event) => setFilter('assignee', event.target.value)} aria-label="Filter by assignee">
           <option value="all">All assignees</option>
-          {employees.map((person) => <option key={person.id} value={person.id}>{person.full_name}</option>)}
+          {employees.map((person) => <option key={person.id} value={person.id}>{displayName(person)}</option>)}
         </select>
         <select className="ws-select ws-select-sm" value={filters.project} onChange={(event) => setFilter('project', event.target.value)} aria-label="Filter by project">
           <option value="all">All projects</option>

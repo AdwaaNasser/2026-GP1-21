@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { clearLogin, getLogin } from './api.js';
+import { clearLogin, displayName, getLogin } from './api.js';
 import { Avatar, Icon } from './taskUi.jsx';
 
 const LINKS = {
@@ -111,9 +111,9 @@ export default function Shell({ role, title, subtitle, breadcrumbs = [], childre
           ))}
         </nav>
         <div className="ws-sidebar-footer">
-          <Avatar name={login.user.full_name} size={32} />
+          <Avatar name={displayName(login.user)} size={32} />
           <div className="ws-user">
-            <span className="ws-user-name">{login.user.full_name}</span>
+            <span className="ws-user-name">{displayName(login.user)}</span>
             <span className="ws-user-role">{login.user.role}</span>
           </div>
           <button type="button" className="ws-icon-btn" onClick={logout} aria-label="Log out" title="Log out">
