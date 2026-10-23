@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { apiRequest, responseData } from './api.js';
+import { apiRequest, displayName, responseData } from './api.js';
 
 export const PRIORITIES = [
   ['low', 'Low'],
@@ -79,7 +79,7 @@ export function filterTasks(tasks, filters) {
   const text = (filters.search || '').trim().toLowerCase();
   return tasks.filter((task) => {
     if (text) {
-      const haystack = `${task.title} ${task.description} ${task.assignee.name} ${task.project ? task.project.name : ''}`.toLowerCase();
+      const haystack = `${task.title} ${task.description} ${displayName(task.assignee)} ${task.project ? task.project.name : ''}`.toLowerCase();
       if (!haystack.includes(text)) return false;
     }
     if (filters.status && filters.status !== 'all' && task.status !== filters.status) return false;
@@ -439,7 +439,7 @@ export function TaskTable({ tasks, onOpen, showProject = true, showAssignee = tr
                 </td>
                 {showAssignee && (
                   <td>
-                    <span className="ws-person"><Avatar name={task.assignee.name} />{task.assignee.name}</span>
+                    <span className="ws-person"><Avatar name={displayName(task.assignee)} />{displayName(task.assignee)}</span>
                   </td>
                 )}
                 <td>
@@ -559,7 +559,7 @@ export function TaskForm({ task, projects, employees, lockedProjectId, onSubmit,
           <select className="ws-select" value={form.assignee} onChange={(event) => setField('assignee', event.target.value)}>
             <option value="">Choose an employee</option>
             {employees.map((person) => (
-              <option key={person.id} value={person.id}>{person.full_name}</option>
+              <option key={person.id} value={person.id}>{displayName(person)}</option>
             ))}
           </select>
         </label>
@@ -746,7 +746,7 @@ export function TaskPanel({ task, role, onEdit, onAdvance, onReview, projectHref
       <dl className="ws-detail-grid">
         <div>
           <dt>Assignee</dt>
-          <dd><span className="ws-person"><Avatar name={task.assignee.name} />{task.assignee.name}</span></dd>
+          <dd><span className="ws-person"><Avatar name={displayName(task.assignee)} />{displayName(task.assignee)}</span></dd>
         </div>
         <div>
           <dt>Project</dt>
@@ -799,4 +799,5 @@ export function TaskPanel({ task, role, onEdit, onAdvance, onReview, projectHref
       )}
     </div>
   );
+}
 }
