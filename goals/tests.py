@@ -4,13 +4,14 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.test import SimpleTestCase, override_settings
-from rest_framework.test import APITestCase
+from rest_framework.test import APIRequestFactory, APITestCase, force_authenticate
 
 from accounts.models import (
     Employee, Evaluation, Goal, Manager, Organization, Project, Task, TaskGoal, User,
 )
 
 from . import rules
+from .views import TeamPerformanceView
 
 TODAY = date(2026, 3, 15)
 
@@ -56,9 +57,44 @@ class RulesTests(SimpleTestCase):
         self.assertTrue(rules.year_ended(2026, date(2027, 1, 1)))
 
 
+class TeamPerformanceViewTests(SimpleTestCase):
+    def test_team_response_contains_separate_employee_names(self):
+        request = APIRequestFactory().get('/team/?year=2026')
+        force_authenticate(
+            request,
+            user=SimpleNamespace(is_authenticated=True, role='Manager'),
+        )
+        employee = SimpleNamespace(
+            pk=17,
+            user=SimpleNamespace(first_name='Sara', last_name='Ali'),
+        )
+        with (
+            patch('goals.permissions.is_manager', return_value=True),
+            patch('goals.views.services.team_of', return_value=[employee]),
+            patch(
+                'goals.views.services.performance',
+                return_value={
+                    'goals': [],
+                    'overall_score': None,
+                    'is_final': False,
+                },
+            ),
+        ):
+            response = TeamPerformanceView.as_view()(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data[0]['first_name'], 'Sara')
+        self.assertEqual(response.data[0]['last_name'], 'Ali')
+        self.assertNotIn('name', response.data[0])
+
+
 def make_user(org, email, role=None, manager=None, is_manager_row=False):
     user = User.objects.create_user(
-        email=email, password='pass12345', org=org, full_name=email.split('@')[0].title(),
+        email=email,
+        password='pass12345',
+        org=org,
+        first_name=email.split('@')[0].title(),
+        last_name='Test',
     )
     if role:
         Employee.objects.create(user=user, system_role=role, manager=manager)
@@ -98,6 +134,17 @@ class GoalsApiTests(APITestCase):
 
     def two_goals(self):
         return [goal_input('Sales', 'Q4', '60'), goal_input('Quality', 'Q4', '40', kind='Task-based', target='2')]
+
+    def test_manager_team_returns_separate_name_fields(self):
+        self.client.force_authenticate(self.boss)
+
+        response = self.client.get('/team/?year=2026')
+
+        self.assertEqual(response.status_code, 200)
+        sara = next(person for person in response.data if person['id'] == self.sara.pk)
+        self.assertEqual(sara['first_name'], self.sara.first_name)
+        self.assertEqual(sara['last_name'], self.sara.last_name)
+        self.assertNotIn('name', sara)
 
     def test_manager_saves_goals_and_dates_come_from_the_period(self):
         response = self.save_goals(self.two_goals())

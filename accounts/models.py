@@ -19,7 +19,6 @@ class UserManager(BaseUserManager):
         email,
         password=None,
         org=None,
-        full_name=None,
         first_name=None,
         last_name=None,
         department=None,
@@ -29,11 +28,18 @@ class UserManager(BaseUserManager):
     ):
         if not email:
             raise ValueError('Users must have an email address.')
+        if not first_name or not first_name.strip():
+            raise ValueError('Users must have a first name.')
+        if not last_name or not last_name.strip():
+            raise ValueError('Users must have a last name.')
+        first_name = first_name.strip()
+        last_name = last_name.strip()
+        if len(first_name) > 255 or len(last_name) > 255:
+            raise ValueError('Names must be 255 characters or fewer.')
 
         user = self.model(
             email=self.normalize_email(email),
             org=org,
-            full_name=full_name,
             first_name=first_name,
             last_name=last_name,
             department=department,
@@ -54,7 +60,6 @@ class User(AbstractBaseUser):
     password = models.CharField(max_length=255, db_column='password_hash')
     last_login = None
     email = models.EmailField(max_length=255, unique=True)
-    full_name = models.CharField(max_length=255, blank=True, null=True)
     first_name = models.CharField(max_length=255, blank=True, null=True)
     last_name = models.CharField(max_length=255, blank=True, null=True)
     gender = models.CharField(max_length=50, blank=True, null=True)
@@ -99,13 +104,11 @@ class User(AbstractBaseUser):
         return self.role == 'HR'
 
     @property
-    def full_display_name(self):
-        if self.full_name:
-            return self.full_name
+    def display_name(self):
         return f'{self.first_name or ""} {self.last_name or ""}'.strip()
 
     def get_full_name(self):
-        return self.full_display_name
+        return self.display_name
 
     def get_short_name(self):
         return self.first_name or self.email

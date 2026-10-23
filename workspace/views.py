@@ -97,7 +97,11 @@ def task_data(task, user):
              {'id': task.project_id, 'name': task.project.title}
                 if task.project else None
         ),
-        'assignee': {'id': task.employee_id, 'name': task.employee.user.full_display_name},
+        'assignee': {
+            'id': task.employee_id,
+            'first_name': task.employee.user.first_name or '',
+            'last_name': task.employee.user.last_name or '',
+        },
         'start_date': task.start_date,
         'due_date': task.due_date,
         'priority': task.priority,
@@ -117,7 +121,10 @@ def project_data(project, user, with_tasks=False):
         'id': project.pk,
         'name': project.title,
         'description': project.description,
-        'manager': project.manager.user.full_display_name,
+        'manager': {
+            'first_name': project.manager.user.first_name or '',
+            'last_name': project.manager.user.last_name or '',
+        },
         'progress': progress_of(tasks),
     }
     if with_tasks:
@@ -198,7 +205,8 @@ class ProjectMembersView(APIView):
         return Response([
             {
                 'employee_id': employee.pk,
-                'name': employee.full_display_name,
+                'first_name': employee.first_name or '',
+                'last_name': employee.last_name or '',
                 'is_member': employee.pk in member_ids,
             }
             for employee in employees
@@ -311,4 +319,3 @@ class TaskDetailView(APIView):
             return not_found('Task not found.')
         task.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
-
