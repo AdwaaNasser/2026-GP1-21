@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import Shell, { Banner } from './Shell.jsx';
+import { displayName } from './api.js';
 import { LineChart, Meter } from './GoalCharts.jsx';
 import {
   Avatar,
@@ -365,9 +366,9 @@ function GoalEditor({ employee, onChanged, onSaved, success, failure }) {
   return (
     <section className="gl-panel gl-editor">
       <header className="gl-editor-head">
-        <Avatar name={employee.name} size={46} />
+        <Avatar name={displayName(employee)} size={46} />
         <div>
-          <h3>KPI goals for {employee.name}</h3>
+          <h3>KPI goals for {displayName(employee)}</h3>
           <p>
             {CURRENT_YEAR} evaluation
             {data.overall_score !== null && ` · KPI score ${data.overall_score.toFixed(2)} of 5 · ${goalSummary(data)}`}
@@ -659,13 +660,13 @@ function PersonProgress({ person, onManage, failure }) {
     <div className="gl-view">
       <Hero
         compact
-        title={`${person.name} in ${CURRENT_YEAR}`}
+        title={`${displayName(person)} in ${CURRENT_YEAR}`}
         score={data.overall_score}
         final={data.is_final}
         summary={goalSummary(data)}
       />
       {data.goals.length === 0 ? (
-        <EmptyState icon="flag" title="No goals yet">Set goals for {person.name} to start tracking their progress.</EmptyState>
+        <EmptyState icon="flag" title="No goals yet">Set goals for {displayName(person)} to start tracking their progress.</EmptyState>
       ) : (
         <GoalCards goals={data.goals} />
       )}
@@ -725,13 +726,13 @@ function ManagerGoalsContent() {
                   style={{ '--i': index }}
                   tabIndex={0}
                   role="button"
-                  aria-label={`View progress of ${person.name}`}
+                  aria-label={`View progress of ${displayName(person)}`}
                   onClick={() => setViewId(person.id)}
                   onKeyDown={(event) => { if (event.key === 'Enter' && event.target === event.currentTarget) setViewId(person.id); }}
                 >
-                  <Avatar name={person.name} size={40} />
+                  <Avatar name={displayName(person)} size={40} />
                   <div className="gl-team-who">
-                    <strong>{person.name}</strong>
+                    <strong>{displayName(person)}</strong>
                     <span>{person.goal_count === 0 ? 'No goals yet' : `${person.goal_count} ${person.goal_count === 1 ? 'goal' : 'goals'} in ${CURRENT_YEAR}`}</span>
                   </div>
                   <div className="gl-team-score">
@@ -750,7 +751,7 @@ function ManagerGoalsContent() {
         </>
       )}
       {viewed && !selected && (
-        <Modal title={`Progress · ${viewed.name}`} onClose={() => setViewId(null)}>
+        <Modal title={`Progress · ${displayName(viewed)}`} onClose={() => setViewId(null)}>
           <PersonProgress
             key={viewed.id}
             person={viewed}
@@ -760,7 +761,7 @@ function ManagerGoalsContent() {
         </Modal>
       )}
       {selected && (
-        <Modal title={`KPI goals · ${selected.name}`} onClose={() => setSelectedId(null)}>
+        <Modal title={`KPI goals · ${displayName(selected)}`} onClose={() => setSelectedId(null)}>
           <Banner message={banner.message} isError={banner.isError} onClose={clear} />
           <GoalEditor key={selected.id} employee={selected} onChanged={loadTeam} onSaved={() => setSelectedId(null)} success={success} failure={failure} />
         </Modal>
