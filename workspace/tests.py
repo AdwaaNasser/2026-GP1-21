@@ -21,7 +21,9 @@ class TaskDataTests(SimpleTestCase):
             project_id=3,
             project=SimpleNamespace(title='Website'),
             employee_id=5,
-            employee=SimpleNamespace(user=SimpleNamespace(full_display_name='Sara Ali')),
+            employee=SimpleNamespace(
+                user=SimpleNamespace(first_name='Sara', last_name='Ali'),
+            ),
             start_date=date(2026, 10, 1),
             due_date=date(2026, 10, 9),
             priority='high',
@@ -34,7 +36,10 @@ class TaskDataTests(SimpleTestCase):
     def test_task_comes_with_project_assignee_privacy_and_feedback(self):
         data = task_data(self.make_task(), SimpleNamespace(pk=5, role='Employee'))
         self.assertEqual(data['project'], {'id': 3, 'name': 'Website'})
-        self.assertEqual(data['assignee'], {'id': 5, 'name': 'Sara Ali'})
+        self.assertEqual(
+            data['assignee'],
+            {'id': 5, 'first_name': 'Sara', 'last_name': 'Ali'},
+        )
         self.assertEqual(data['privacy'], 'public')
         self.assertEqual(data['feedback'], 'Fix the totals')
         self.assertEqual(data['status'], 'todo')
@@ -128,7 +133,6 @@ def make_user(org, email, role=None, manager=False):
         email=email,
         password='pass12345',
         org=org,
-        full_name=email.split('@')[0].title(),
         first_name=email.split('@')[0].title(),
         last_name='Test',
     )
@@ -542,4 +546,5 @@ class ProjectMembersTests(WorkspaceApiTestCase):
             {'employee_id': self.idle.pk, 'is_member': True},
             format='json',
         )
+        self.assertEqual(response.status_code, 405)
         self.assertEqual(response.status_code, 405)
