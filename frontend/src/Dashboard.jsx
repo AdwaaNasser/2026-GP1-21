@@ -176,7 +176,8 @@ export default function Dashboard({ role }) {
                     <h2>Bring your team into Bayyinah</h2>
                     <p className="description">
                       Import your employee list. Review the department summary, then send
-                      secure invitations when everything looks right.
+                      secure invitations when everything looks right. Each row must include
+                      a hire_date in YYYY-MM-DD format to calculate years of service.
                     </p>
                   </div>
                   <a className="button button-primary" href="#upload">Import team</a>
@@ -519,3 +520,4 @@ export function DashboardRouter({ role }) {
 
   return <WorkspaceOverview role={role} />;
 }
+
