@@ -49,7 +49,7 @@ class TaskWriteSerializer(serializers.ModelSerializer):
 
     def validate_assignee(self, employee):
         manager = self.context['request'].user
-        if employee.system_role != 'Employee' or employee.user.org_id != manager.org_id:
+        if employee.user.role != 'Employee' or employee.user.org_id != manager.org_id:
             raise serializers.ValidationError(
                 'Choose an employee from your organization.'
             )
