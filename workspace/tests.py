@@ -133,12 +133,17 @@ def make_user(org, email, role=None, manager=False):
         email=email,
         password='pass12345',
         org=org,
+        hire_date='2020-01-01',
         first_name=email.split('@')[0].title(),
         last_name='Test',
+        job_title=role or 'HR',
     )
-    if role:
-        Employee.objects.create(user=user, system_role=role)
-    if manager:
+    if role in {'HR', 'Employee'}:
+        Employee.objects.create(
+            user=user,
+            system_role=role,
+        )
+    if manager or role == 'Manager':
         Manager.objects.create(user=user)
     return user
 
@@ -546,5 +551,4 @@ class ProjectMembersTests(WorkspaceApiTestCase):
             {'employee_id': self.idle.pk, 'is_member': True},
             format='json',
         )
-        self.assertEqual(response.status_code, 405)
         self.assertEqual(response.status_code, 405)
