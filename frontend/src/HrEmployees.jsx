@@ -25,7 +25,6 @@ function EmployeeForm({ employee, departments, onSubmit, onCancel }) {
       ? {
           first_name: employee.first_name,
           last_name: employee.last_name,
-          job_title: employee.job_title || '',
           hire_date: employee.hire_date || '',
           department_id: String(employee.department.id),
         }
@@ -34,6 +33,7 @@ function EmployeeForm({ employee, departments, onSubmit, onCancel }) {
           last_name: '',
           email: '',
           role: 'Employee',
+          hire_date: '',
           department_id: departments.length === 1 ? String(departments[0].id) : '',
         },
   );
@@ -53,6 +53,7 @@ function EmployeeForm({ employee, departments, onSubmit, onCancel }) {
       if (!form.last_name.trim()) return 'Last name is required.';
       if (!form.email.trim()) return 'Email is required.';
       if (!EMAIL_PATTERN.test(form.email.trim())) return 'Enter a valid email address.';
+      if (!form.hire_date) return 'Hire date is required.';
     }
     if (!form.department_id) return 'Choose a department.';
     return '';
@@ -73,7 +74,6 @@ function EmployeeForm({ employee, departments, onSubmit, onCancel }) {
           ? {
               first_name: form.first_name.trim(),
               last_name: form.last_name.trim(),
-              job_title: form.job_title.trim(),
               hire_date: form.hire_date,
               department_id: Number(form.department_id),
             }
@@ -82,6 +82,7 @@ function EmployeeForm({ employee, departments, onSubmit, onCancel }) {
               last_name: form.last_name.trim(),
               email: form.email.trim(),
               role: form.role,
+              hire_date: form.hire_date,
               department_id: Number(form.department_id),
             },
       );
@@ -109,12 +110,12 @@ function EmployeeForm({ employee, departments, onSubmit, onCancel }) {
           </div>
           <div className="ws-form-grid">
             <label className="ws-field">
-              <span className="ws-label">Job title <span className="ws-optional">(optional)</span></span>
-              <input className="ws-input" value={form.job_title} maxLength={100} onChange={(e) => setField('job_title', e.target.value)} />
+              <span className="ws-label">Role</span>
+              <input className="ws-input" value={employee.role} readOnly />
             </label>
             <label className="ws-field">
               <span className="ws-label">Hire date</span>
-              <input className="ws-input" type="date" value={form.hire_date} onChange={(e) => setField('hire_date', e.target.value)} />
+              <input className="ws-input" type="date" value={form.hire_date} onChange={(e) => setField('hire_date', e.target.value)} required />
             </label>
           </div>
         </>
@@ -143,6 +144,10 @@ function EmployeeForm({ employee, departments, onSubmit, onCancel }) {
               </select>
             </label>
           </div>
+          <label className="ws-field">
+            <span className="ws-label">Hire date</span>
+            <input className="ws-input" type="date" value={form.hire_date} onChange={(e) => setField('hire_date', e.target.value)} required />
+          </label>
         </>
       )}
 
