@@ -7,6 +7,7 @@ export default function OrgSetup() {
     first_name: '',
     last_name: '',
     email: '',
+    hire_date: '',
     password: '',
     confirm_password: '',
   });
@@ -35,6 +36,7 @@ export default function OrgSetup() {
           first_name: form.first_name,
           last_name: form.last_name,
           email: form.email,
+          hire_date: form.hire_date,
           password: form.password,
         }),
       });
@@ -74,6 +76,8 @@ export default function OrgSetup() {
           </div>
           <label htmlFor="admin-email">Work email</label>
           <input id="admin-email" type="email" autoComplete="email" value={form.email} onChange={(event) => update('email', event.target.value)} required />
+          <label htmlFor="admin-hire-date">Hire date</label>
+          <input id="admin-hire-date" type="date" value={form.hire_date} onChange={(event) => update('hire_date', event.target.value)} required />
           <div className="form-two-columns">
             <div>
               <label htmlFor="setup-password">Create password</label>
