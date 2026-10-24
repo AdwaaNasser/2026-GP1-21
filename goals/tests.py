@@ -93,12 +93,18 @@ def make_user(org, email, role=None, manager=None, is_manager_row=False):
         email=email,
         password='pass12345',
         org=org,
+        hire_date='2020-01-01',
         first_name=email.split('@')[0].title(),
         last_name='Test',
+        job_title=role or 'HR',
     )
-    if role:
-        Employee.objects.create(user=user, system_role=role, manager=manager)
-    if is_manager_row:
+    if role in {'HR', 'Employee'}:
+        Employee.objects.create(
+            user=user,
+            system_role=role,
+            manager=manager,
+        )
+    if is_manager_row or role == 'Manager':
         Manager.objects.create(user=user)
     return user
 
