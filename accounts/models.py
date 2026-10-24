@@ -19,6 +19,7 @@ class UserManager(BaseUserManager):
         email,
         password=None,
         org=None,
+        hire_date=None,
         first_name=None,
         last_name=None,
         department=None,
@@ -28,6 +29,10 @@ class UserManager(BaseUserManager):
     ):
         if not email:
             raise ValueError('Users must have an email address.')
+        if hire_date is None:
+            raise ValueError('Users must have a hire date.')
+        if job_title not in {'HR', 'Employee', 'Manager'}:
+            raise ValueError('Job title must be HR, Employee, or Manager.')
         if not first_name or not first_name.strip():
             raise ValueError('Users must have a first name.')
         if not last_name or not last_name.strip():
@@ -40,6 +45,7 @@ class UserManager(BaseUserManager):
         user = self.model(
             email=self.normalize_email(email),
             org=org,
+            hire_date=hire_date,
             first_name=first_name,
             last_name=last_name,
             department=department,
@@ -63,7 +69,17 @@ class User(AbstractBaseUser):
     first_name = models.CharField(max_length=255, blank=True, null=True)
     last_name = models.CharField(max_length=255, blank=True, null=True)
     gender = models.CharField(max_length=50, blank=True, null=True)
-    job_title = models.CharField(max_length=255, blank=True, null=True)
+    job_title = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        choices=[
+            ('HR', 'HR Professional'),
+            ('Employee', 'Employee'),
+            ('Manager', 'Manager'),
+        ],
+    )
+    hire_date = models.DateField()
     allowed_absence_days = models.IntegerField(blank=True, null=True)
     department = models.CharField(max_length=255, blank=True, null=True)
     org = models.ForeignKey(
@@ -83,6 +99,8 @@ class User(AbstractBaseUser):
 
     @property
     def role(self):
+        if self.job_title in {'HR', 'Employee', 'Manager'}:
+            return self.job_title
         if hasattr(self, 'manager_record'):
             return 'Manager'
         try:
@@ -125,8 +143,13 @@ class Employee(models.Model):
         db_column='user_id',
         related_name='employee_record',
     )
-    system_role = models.CharField(max_length=100, blank=True, null=True)
-    hire_date = models.DateField(blank=True, null=True)
+    system_role = models.CharField(
+        max_length=100,
+        choices=[
+            ('HR', 'HR Professional'),
+            ('Employee', 'Employee'),
+        ],
+    )
 
     manager = models.ForeignKey(
     'Manager',
