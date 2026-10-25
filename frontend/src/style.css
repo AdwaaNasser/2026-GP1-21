@@ -2830,3 +2830,20 @@ body { background: linear-gradient(180deg, #fbf1e8 0%, #fdf8f3 100%) fixed; }
   .mk-steps, .mk-facts-grid { grid-template-columns: 1fr; }
   .mk-section { padding: 64px 0; }
 }
+/* Official statistics: keep the unit smaller than the number so long values fit */
+.mk-fact strong small {
+  margin: 0 0 0 0.15em;
+  color: #fff;
+  font-size: 0.42em;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.mk-fact strong small:first-child { margin: 0 0.1em 0 0; }
+
+/* Note under the burnout demo (the section has a light background) */
+.mk-note {
+  margin: 18px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
