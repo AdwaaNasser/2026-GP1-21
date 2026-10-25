@@ -11,12 +11,6 @@ Bayyinah is a people-management and employee-onboarding application with role-aw
 	•	Database: PostgreSQL
 	•	Tools: Git & GitHub, Visual Studio Code
   
-## Project structure
-
-- `accounts/` — account, organization, department, invitation, and employee features, including management commands and migrations.
-- `bayyinah_backend/` — Django project settings and URL configuration.
-- `frontend/` — React interface and Vite configuration.
-- `Logo.PNG` — Bayyinah brand logo.
 
 ## Requirements
 
