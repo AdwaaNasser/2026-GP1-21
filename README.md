@@ -70,22 +70,3 @@ npm run dev
 
 Open <http://127.0.0.1:5173/>.
 
-## Tests and build
-
-From the project root:
-
-```powershell
-.\venv\Scripts\python.exe manage.py test accounts.tests
-```
-
-From the `frontend` directory:
-
-```powershell
-npm run build
-```
-
-## Database and privacy
-
-Commit the Django models and migrations to share the database structure. Local database files, SQL exports, password hashes, invitation tokens, and credentials are intentionally excluded. Create a separate PostgreSQL database for each developer and configure its connection through environment variables.
-
-The example addresses in automated tests are placeholders; do not use real employee data in tests or commit database exports containing personal information.
