@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import Shell, { Banner } from './Shell.jsx';
+import { clearLogin, getLogin } from './api.js';
+import { Banner } from './Shell.jsx';
 import {
   Avatar,
   EmptyState,
@@ -11,13 +12,14 @@ import {
   sendJson,
   useBanner,
 } from './taskUi.jsx';
-import { displayName } from './api.js';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const GENDERS = ['Male', 'Female'];
 
+function matchGender(value) {
+  return GENDERS.find((gender) => gender.toLowerCase() === String(value || '').toLowerCase()) || '';
+}
 
-//  add a new employee
-//   update an employee's information
 function EmployeeForm({ employee, departments, onSubmit, onCancel }) {
   const isEdit = Boolean(employee);
   const [form, setForm] = useState(
@@ -25,16 +27,20 @@ function EmployeeForm({ employee, departments, onSubmit, onCancel }) {
       ? {
           first_name: employee.first_name,
           last_name: employee.last_name,
+          gender: matchGender(employee.gender),
+          job_title: employee.job_title || '',
           hire_date: employee.hire_date || '',
-          department_id: String(employee.department.id),
+          allowed_absence_days: String(employee.allowed_absence_days ?? ''),
+          department_id: String(employee.department?.id ?? ''),
         }
       : {
-          first_name: '',
-          last_name: '',
+          full_name: '',
           email: '',
           role: 'Employee',
-          hire_date: '',
           department_id: departments.length === 1 ? String(departments[0].id) : '',
+          gender: '',
+          job_title: '',
+          allowed_absence_days: '',
         },
   );
   const [error, setError] = useState('');
@@ -47,15 +53,17 @@ function EmployeeForm({ employee, departments, onSubmit, onCancel }) {
   function validate() {
     if (isEdit) {
       if (!form.first_name.trim()) return 'First name is required.';
-      if (!form.hire_date) return 'Hire date is required.';
     } else {
-      if (!form.first_name.trim()) return 'First name is required.';
-      if (!form.last_name.trim()) return 'Last name is required.';
+      if (!form.full_name.trim()) return 'Full name is required.';
       if (!form.email.trim()) return 'Email is required.';
       if (!EMAIL_PATTERN.test(form.email.trim())) return 'Enter a valid email address.';
-      if (!form.hire_date) return 'Hire date is required.';
     }
     if (!form.department_id) return 'Choose a department.';
+    if (!form.job_title.trim()) return 'Job title is required.';
+    if (!form.gender) return 'Choose a gender.';
+    if (isEdit && !form.hire_date) return 'Hire date is required.';
+    if (form.allowed_absence_days === '') return 'Allowed absence days is required.';
+    if (!/^\d+$/.test(form.allowed_absence_days)) return 'Allowed absence days must be a whole number (0 or more).';
     return '';
   }
 
@@ -74,16 +82,20 @@ function EmployeeForm({ employee, departments, onSubmit, onCancel }) {
           ? {
               first_name: form.first_name.trim(),
               last_name: form.last_name.trim(),
+              gender: form.gender,
+              job_title: form.job_title.trim(),
               hire_date: form.hire_date,
+              allowed_absence_days: Number(form.allowed_absence_days),
               department_id: Number(form.department_id),
             }
           : {
-              first_name: form.first_name.trim(),
-              last_name: form.last_name.trim(),
+              full_name: form.full_name.trim(),
               email: form.email.trim(),
               role: form.role,
-              hire_date: form.hire_date,
               department_id: Number(form.department_id),
+              gender: form.gender,
+              job_title: form.job_title.trim(),
+              allowed_absence_days: Number(form.allowed_absence_days),
             },
       );
     } catch (failure) {
@@ -110,27 +122,21 @@ function EmployeeForm({ employee, departments, onSubmit, onCancel }) {
           </div>
           <div className="ws-form-grid">
             <label className="ws-field">
-              <span className="ws-label">Role</span>
-              <input className="ws-input" value={employee.role} readOnly />
+              <span className="ws-label">Job title</span>
+              <input className="ws-input" value={form.job_title} maxLength={100} onChange={(e) => setField('job_title', e.target.value)} />
             </label>
             <label className="ws-field">
               <span className="ws-label">Hire date</span>
-              <input className="ws-input" type="date" value={form.hire_date} onChange={(e) => setField('hire_date', e.target.value)} required />
+              <input className="ws-input" type="date" value={form.hire_date} onChange={(e) => setField('hire_date', e.target.value)} />
             </label>
           </div>
         </>
       ) : (
         <>
-          <div className="ws-form-grid">
-            <label className="ws-field">
-              <span className="ws-label">First name</span>
-              <input className="ws-input" value={form.first_name} maxLength={255} autoFocus onChange={(e) => setField('first_name', e.target.value)} />
-            </label>
-            <label className="ws-field">
-              <span className="ws-label">Last name</span>
-              <input className="ws-input" value={form.last_name} maxLength={255} onChange={(e) => setField('last_name', e.target.value)} />
-            </label>
-          </div>
+          <label className="ws-field">
+            <span className="ws-label">Full name</span>
+            <input className="ws-input" value={form.full_name} maxLength={200} autoFocus onChange={(e) => setField('full_name', e.target.value)} />
+          </label>
           <div className="ws-form-grid">
             <label className="ws-field">
               <span className="ws-label">Email</span>
@@ -140,14 +146,11 @@ function EmployeeForm({ employee, departments, onSubmit, onCancel }) {
               <span className="ws-label">Role</span>
               <select className="ws-select" value={form.role} onChange={(e) => setField('role', e.target.value)}>
                 <option value="Employee">Employee</option>
-                <option value="Manager">Manager</option>
+<option value="Manager">Manager</option>
+<option value="HR">HR Professional</option>
               </select>
             </label>
           </div>
-          <label className="ws-field">
-            <span className="ws-label">Hire date</span>
-            <input className="ws-input" type="date" value={form.hire_date} onChange={(e) => setField('hire_date', e.target.value)} required />
-          </label>
         </>
       )}
 
@@ -162,12 +165,35 @@ function EmployeeForm({ employee, departments, onSubmit, onCancel }) {
       </label>
 
       {!isEdit && (
-        <p className="ws-hint">An invitation email is sent so the new employee can set their own password.</p>
+        <label className="ws-field">
+          <span className="ws-label">Job title</span>
+          <input className="ws-input" value={form.job_title} maxLength={100} onChange={(e) => setField('job_title', e.target.value)} />
+        </label>
+      )}
+
+      <div className="ws-form-grid">
+        <label className="ws-field">
+          <span className="ws-label">Gender</span>
+          <select className="ws-select" value={form.gender} onChange={(e) => setField('gender', e.target.value)}>
+            <option value="">Choose gender</option>
+            {GENDERS.map((gender) => (
+              <option key={gender} value={gender}>{gender}</option>
+            ))}
+          </select>
+        </label>
+        <label className="ws-field">
+          <span className="ws-label">Allowed absence days</span>
+          <input className="ws-input" inputMode="numeric" value={form.allowed_absence_days} onChange={(e) => setField('allowed_absence_days', e.target.value)} />
+        </label>
+      </div>
+
+      {!isEdit && (
+        <p className="ws-hint">An invitation email is sent so the new team member can set their own password.</p>
       )}
 
       <div className="ws-form-actions">
         <button className="ws-btn ws-btn-primary" type="submit" disabled={saving}>
-          {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Add employee'}
+          {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Add user'}
         </button>
         <button className="ws-btn ws-btn-secondary" type="button" onClick={onCancel} disabled={saving}>Cancel</button>
       </div>
@@ -177,7 +203,7 @@ function EmployeeForm({ employee, departments, onSubmit, onCancel }) {
 
 function EmployeesContent() {
   const { banner, success, failure, clear } = useBanner();
-  const [employees, setEmployees] = useState(null); // null while loading
+  const [employees, setEmployees] = useState(null);
   const [departments, setDepartments] = useState([]);
   const [search, setSearch] = useState('');
   const [adding, setAdding] = useState(false);
@@ -204,7 +230,7 @@ function EmployeesContent() {
   async function addEmployee(body) {
     const result = await sendJson('/api/accounts/team-invite/', 'POST', body);
     setAdding(false);
-    success(result.message || 'Employee added.');
+    success(result.message || 'User added.');
     load();
   }
 
@@ -215,12 +241,11 @@ function EmployeesContent() {
     load();
   }
 
-  // Story 7: show the employees that match the search text.
   const shown = useMemo(() => {
     const text = search.trim().toLowerCase();
     if (!text) return employees || [];
     return (employees || []).filter((person) =>
-      `${displayName(person)} ${person.email} ${person.job_title || ''} ${person.department.name} ${person.role}`
+      `${person.full_name} ${person.email} ${person.job_title || ''} ${person.department?.name || ''} ${person.role}`
         .toLowerCase()
         .includes(text),
     );
@@ -243,7 +268,7 @@ function EmployeesContent() {
         </label>
         <button className="ws-btn ws-btn-primary" type="button" onClick={() => setAdding(true)}>
           <Icon name="plus" size={15} />
-          Add employee
+          Add new user
         </button>
       </div>
 
@@ -251,8 +276,8 @@ function EmployeesContent() {
         <TableSkeleton />
       ) : employees.length === 0 ? (
         <div className="ws-card">
-          <EmptyState icon="users" title="No employees yet">
-            Add your first employee, or import a CSV file from the HR overview.
+          <EmptyState icon="users" title="No users yet">
+            Add your first user, or import a CSV file from the HR overview.
           </EmptyState>
         </div>
       ) : shown.length === 0 ? (
@@ -274,16 +299,16 @@ function EmployeesContent() {
                 <tr key={person.id}>
                   <td>
                     <div className="hr-person">
-                      <Avatar name={displayName(person)} size={28} />
+                      <Avatar name={person.full_name} size={28} />
                       <div>
-                        <div className="ws-task-title">{displayName(person)}</div>
+                        <div className="ws-task-title">{person.full_name}</div>
                         <div className="ws-task-sub">{person.email}</div>
                       </div>
                     </div>
                   </td>
                   <td>{person.role}</td>
                   <td>{person.job_title || '—'}</td>
-                  <td>{person.department.name}</td>
+                  <td>{person.department?.name || '—'}</td>
                   <td>{formatDate(person.hire_date)}</td>
                   <td>
                     <button className="ws-btn ws-btn-secondary ws-btn-sm" type="button" onClick={() => setEditing(person)}>
@@ -299,12 +324,12 @@ function EmployeesContent() {
       )}
 
       {adding && (
-        <Modal title="Add employee" onClose={() => setAdding(false)}>
+        <Modal title="Add new user" onClose={() => setAdding(false)}>
           <EmployeeForm departments={departments} onSubmit={addEmployee} onCancel={() => setAdding(false)} />
         </Modal>
       )}
       {editing && (
-        <Modal title={`Edit ${displayName(editing)}`} onClose={() => setEditing(null)}>
+        <Modal title={`Edit ${editing.full_name}`} onClose={() => setEditing(null)}>
           <EmployeeForm employee={editing} departments={departments} onSubmit={updateEmployee} onCancel={() => setEditing(null)} />
         </Modal>
       )}
@@ -312,14 +337,76 @@ function EmployeesContent() {
   );
 }
 
+function initials(name = '') {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'B';
+}
+
+function dashboardPath(role) {
+  if (role === 'Manager') return '/dashboard/manager';
+  return '/dashboard/employee';
+}
+
 export default function HrEmployees() {
+  const [login, setLogin] = useState(null);
+
+  useEffect(() => {
+    const savedLogin = getLogin();
+    if (!savedLogin) {
+      window.location.replace('/login');
+      return;
+    }
+    if (savedLogin.user.role !== 'HR Professional' && savedLogin.user.role !== 'HR') {
+      window.location.replace(dashboardPath(savedLogin.user.role));
+      return;
+    }
+    setLogin(savedLogin);
+  }, []);
+
+  function logout() {
+    clearLogin();
+    window.location.assign('/');
+  }
+
+  if (!login) {
+    return <main className="page"><section className="card">Opening your workspace…</section></main>;
+  }
+
   return (
-    <Shell
-      role="HR"
-      title="Manage employees"
-      subtitle="Add, update and search the people in your organization."
-    >
-      <EmployeesContent />
-    </Shell>
+    <main className="dashboard">
+      <header className="dashboard-header">
+        <div className="dashboard-heading">
+          <a className="dashboard-brand" href="/" aria-label="Bayyinah home">
+            <img className="dashboard-logo" src="/bayyinah-logo.png" alt="" />
+            <span>Bayyinah</span>
+          </a>
+          <div>
+            <p className="eyebrow">BAYYINAH WORKSPACE</p>
+            <h1>Manage Employees</h1>
+            <p className="description">Welcome back, {login.user.full_name}</p>
+          </div>
+        </div>
+        <div className="dashboard-header-actions">
+          <span className="user-chip"><span className="user-avatar">{initials(login.user.full_name)}</span>{login.user.role}</span>
+          <button className="secondary-button" type="button" onClick={logout}>Log out</button>
+        </div>
+      </header>
+
+      <div className="dashboard-workspace hr-dashboard-workspace">
+        <nav className="hr-dashboard-sidebar" aria-label="HR dashboard navigation">
+          <a href="/dashboard/hr">Overview</a>
+          <a href="/dashboard/hr#overview">Dashboards</a>
+          <a href="/dashboard/hr#team">People</a>
+          <a href="/dashboard/hr#import">Import team</a>
+          <a className="active" href="/hr/employees">Manage employees</a>
+          <a href="/" onClick={(event) => { event.preventDefault(); logout(); }}>Sign out</a>
+        </nav>
+
+        <div className="dashboard-main">
+          <div className="ws-app hr-employees-page">
+            <EmployeesContent />
+          </div>
+        </div>
+      </div>
+    </main>
   );
 }
