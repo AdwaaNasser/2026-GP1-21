@@ -3,8 +3,8 @@ import SiteHeader from './SiteHeader.jsx';
 import SiteFooter from './SiteFooter.jsx';
 
 // Landing page. The header, hero and feature strip keep the original Bayyinah design.
-// Everything after the feature strip is new: an animated burnout section, survey numbers,
-// how it works, about us, FAQ and a closing call to action.
+// Everything after the feature strip is new: an animated burnout section, official statistics,
+// how it works, about us, a "get to know us" Q&A and a closing call to action.
 
 // ---------- Small helpers ----------
 
@@ -243,9 +243,9 @@ function BurnoutScene() {
   );
 }
 
-// ---------- Numbers from our own survey ----------
+// ---------- Official statistics (World Health Organization) ----------
 
-function CountUp({ to, suffix = '%' }) {
+function CountUp({ to, prefix = '', suffix = '', unit = '' }) {
   const ref = useRef(null);
   const [go, setGo] = useState(false);
   useEffect(() => {
@@ -263,14 +263,22 @@ function CountUp({ to, suffix = '%' }) {
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
-  const value = useAnimatedNumber(go ? to : 0, 1400);
-  return <span ref={ref}>{Math.round(value)}{suffix}</span>;
+  const animated = useAnimatedNumber(go ? to : 0, 1400);
+  // A single digit (like 1) would flash "0" first, so small numbers are shown directly.
+  const value = to <= 1 ? (go ? to : 0) : animated;
+  return (
+    <span ref={ref}>
+      {prefix && <small>{prefix}</small>}
+      {Math.round(value)}{suffix}
+      {unit && <small>{unit}</small>}
+    </span>
+  );
 }
 
 const FACTS = [
-  [91, 'of surveyed employees feel work stress or burnout at least sometimes'],
-  [30, 'of HR and managers have no systematic way to spot burnout'],
-  [88, 'of employees rate one central system for tasks as very or extremely useful'],
+  { value: 12, unit: ' billion', text: 'working days are lost every year to depression and anxiety' },
+  { value: 1, prefix: 'US$', unit: ' trillion', text: 'in lost productivity every year as a result' },
+  { value: 15, suffix: '%', text: 'of working-age adults were estimated to have a mental disorder in 2019' },
 ];
 
 // ---------- Content ----------
@@ -291,7 +299,7 @@ const PILLARS = [
 const FAQ = [
   ['What does burnout prediction do?', 'It estimates each employee’s burnout risk from work data like workload, tasks, meetings and attendance, and shows it as low, medium or high. It is a risk estimate, not a diagnosis.'],
   ['Why is a person marked at risk?', 'Every score lists the top factors that raised or lowered it, so managers can see what to change.'],
-  ['Who sees what?', 'HR sees the organization, managers see their department, and employees see their own information.'],
+  ['Who sees what?', 'HR sees the organization, managers see their team, and employees see their own information.'],
   ['How do employees join?', 'HR adds them one by one or imports a CSV file. Each person gets an email invitation and sets their own password.'],
 ];
 
@@ -374,26 +382,27 @@ export default function Home() {
         <section className="mk-section" id="burnout">
           <div className="mk-wrap">
             <Reveal className="mk-head">
-              <span className="mk-eyebrow">New feature</span>
+              <span className="mk-eyebrow">Key feature</span>
               <h2 className="mk-h2">See burnout before it costs you <span>someone good.</span></h2>
               <p className="mk-lead">Bayyinah predicts each employee’s burnout risk and shows the reasons behind it.</p>
             </Reveal>
             <BurnoutScene />
+            <p className="mk-note">Sample data shown for illustration only.</p>
           </div>
         </section>
 
-        {/* ---------- Survey numbers ---------- */}
+        {/* ---------- Official numbers (WHO) ---------- */}
         <section className="mk-facts" aria-label="Why it matters">
           <div className="mk-wrap">
             <div className="mk-facts-grid">
-              {FACTS.map(([value, text], index) => (
+              {FACTS.map(({ value, prefix, suffix, unit, text }, index) => (
                 <Reveal className="mk-fact" key={text} delay={index * 120}>
-                  <strong><CountUp to={value} /></strong>
+                  <strong><CountUp to={value} prefix={prefix} suffix={suffix} unit={unit} /></strong>
                   <span>{text}</span>
                 </Reveal>
               ))}
             </div>
-            <p className="mk-source">Source: Bayyinah requirements survey, 62 employees, managers and HR professionals.</p>
+            <p className="mk-source">Source: World Health Organization, “Mental health at work” fact sheet.</p>
           </div>
         </section>
 
@@ -439,12 +448,12 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ---------- FAQ ---------- */}
+        {/* ---------- Questions to get to know us better ---------- */}
         <section className="mk-section" id="faq">
           <div className="mk-wrap mk-faq">
             <Reveal className="mk-head">
-              <span className="mk-eyebrow">FAQ</span>
-              <h2 className="mk-h2">Quick answers.</h2>
+              <span className="mk-eyebrow">Get to know us</span>
+              <h2 className="mk-h2">Questions to get to know us better.</h2>
             </Reveal>
             <Reveal className="mk-faq-list" delay={120}>
               {FAQ.map(([question, answer]) => (
