@@ -5,7 +5,7 @@ import Dashboard, { DashboardRouter } from './Dashboard.jsx';
 import Home from './Home.jsx';
 import Login from './Login.jsx';
 import OrgSetup from './OrgSetup.jsx';
-import HrEmployees from './HrEmployees.jsx';
+import HrTeam from './HrTeam.jsx';
 import ForgotPassword from './ForgotPassword.jsx';
 import ResetPassword from './ResetPassword.jsx';
 import EmployeeTasks from './EmployeeTasks.jsx';
@@ -23,7 +23,7 @@ const pages = {
   '/set-password': App,
   '/forgot-password': ForgotPassword,
   '/reset-password': ResetPassword,
-  '/dashboard/hr': () => <Dashboard role="HR" />,
+  '/dashboard/hr': Dashboard,
   '/dashboard/manager': () => <DashboardRouter role="Manager" />,
   '/dashboard/employee': () => <DashboardRouter role="Employee" />,
   '/manager/projects': ManagerProjects,
@@ -33,7 +33,8 @@ const pages = {
   '/employee/tasks': EmployeeTasks,
   '/employee/performance': EmployeePerformance,
   '/hr/performance': HRPerformance,
-  '/hr/employees': HrEmployees,
+  '/hr/team': HrTeam,
+  '/hr/employees': HrTeam, // the old Manage employees page now lives in Import team
   '/employee/project': () => <ProjectDetails role="Employee" />,
 };
 
