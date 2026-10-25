@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import Shell, { Banner } from './Shell.jsx';
+import Shell, { Banner, HeaderActions } from './Shell.jsx';
 import {
-  Avatar,
   EmptyState,
   Icon,
   Modal,
@@ -33,6 +32,22 @@ function downloadTemplate() {
   link.download = 'bayyinah-team-template.csv';
   link.click();
   URL.revokeObjectURL(url);
+}
+
+// Circle with the first letter of the first name and the first letter of the last name.
+function PersonAvatar({ person, size = 28 }) {
+  const first = (person.first_name || '').trim().charAt(0);
+  const last = (person.last_name || '').trim().charAt(0);
+  const letters = `${first}${last}`.toUpperCase() || 'B';
+  return (
+    <span
+      className="ws-avatar"
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.42) }}
+      aria-hidden="true"
+    >
+      {letters}
+    </span>
+  );
 }
 
 // ---------- Add or edit one person ----------
@@ -85,7 +100,7 @@ function PersonForm({ person, departments, onSubmit, onCancel }) {
         isEdit ? shared : { ...shared, email: form.email.trim(), role: form.job_title },
       );
     } catch (failure) {
-      setError(failure.message || 'The person could not be saved.');
+      setError(failure.message || 'The user could not be saved.');
       setSaving(false);
     }
   }
@@ -155,12 +170,12 @@ function PersonForm({ person, departments, onSubmit, onCancel }) {
       </div>
 
       {!isEdit && (
-        <p className="ws-hint">An invitation email is sent so the new person can set their own password.</p>
+        <p className="ws-hint">An invitation email is sent so the new user can set their own password.</p>
       )}
 
       <div className="ws-form-actions">
         <button className="ws-btn ws-btn-primary" type="submit" disabled={saving}>
-          {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Add person'}
+          {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Add new user'}
         </button>
         <button className="ws-btn ws-btn-secondary" type="button" onClick={onCancel} disabled={saving}>Cancel</button>
       </div>
@@ -247,15 +262,17 @@ function CsvImport({ onImported, success, failure }) {
       </div>
 
       <form id="team-csv-form" className="ws-csv-form" noValidate onSubmit={validatedSubmit(upload)}>
-        <input
-          className="ws-input"
-          type="file"
-          accept=".csv,text/csv"
-          required
-          disabled={busy}
-          aria-label="Employee CSV file"
-          onChange={(event) => setFile(event.target.files?.[0] || null)}
-        />
+        <label className="ws-field ws-csv-field">
+          <span className="ws-label">CSV file</span>
+          <input
+            className="ws-input ws-file-input"
+            type="file"
+            accept=".csv,text/csv"
+            required
+            disabled={busy}
+            onChange={(event) => setFile(event.target.files?.[0] || null)}
+          />
+        </label>
         <button className="ws-btn ws-btn-primary" type="submit" disabled={busy}>
           {busy ? 'Working…' : 'Upload and review'}
         </button>
@@ -334,7 +351,7 @@ function TeamContent() {
   async function addPerson(body) {
     const result = await sendJson('/api/accounts/team-invite/', 'POST', body);
     setAdding(false);
-    success(result.message || 'Person added.');
+    success(result.message || 'User added.');
     load();
   }
 
@@ -367,6 +384,13 @@ function TeamContent() {
 
   return (
     <>
+      <HeaderActions>
+        <button className="ws-btn ws-btn-primary" type="button" onClick={() => setAdding(true)}>
+          <Icon name="plus" size={15} />
+          Add new user
+        </button>
+      </HeaderActions>
+
       <Banner message={banner.message} isError={banner.isError} onClose={clear} />
 
       <CsvImport onImported={load} success={success} failure={failure} />
@@ -388,10 +412,6 @@ function TeamContent() {
                 aria-label="Search people"
               />
             </label>
-            <button className="ws-btn ws-btn-primary" type="button" onClick={() => setAdding(true)}>
-              <Icon name="plus" size={15} />
-              Add person
-            </button>
           </div>
         </div>
 
@@ -399,7 +419,7 @@ function TeamContent() {
           <TableSkeleton />
         ) : people.length === 0 ? (
           <EmptyState icon="users" title="No people yet">
-            Add your first person, or import a CSV file above.
+            Add your first user, or import a CSV file above.
           </EmptyState>
         ) : shown.length === 0 ? (
           <EmptyState icon="search" title="No one matches your search">
@@ -418,7 +438,7 @@ function TeamContent() {
                   <tr key={person.id}>
                     <td>
                       <div className="hr-person">
-                        <Avatar person={person} size={28} />
+                        <PersonAvatar person={person} size={28} />
                         <div>
                           <div className="ws-task-title">{displayName(person)}</div>
                           <div className="ws-task-sub">{person.email}</div>
@@ -457,7 +477,7 @@ function TeamContent() {
       </section>
 
       {adding && (
-        <Modal title="Add person" onClose={() => setAdding(false)}>
+        <Modal title="Add new user" onClose={() => setAdding(false)}>
           <PersonForm departments={departments} onSubmit={addPerson} onCancel={() => setAdding(false)} />
         </Modal>
       )}
@@ -475,7 +495,7 @@ export default function HrTeam() {
     <Shell
       role="HR"
       title="Import team"
-      subtitle="Bring in your team from a CSV file, add people one by one, and keep their details up to date."
+      subtitle="Bring in your team from a CSV file, add users one by one, and keep their details up to date."
     >
       <TeamContent />
     </Shell>

@@ -2893,3 +2893,33 @@ body { background: linear-gradient(180deg, #fbf1e8 0%, #fdf8f3 100%) fixed; }
 .ws-pill-ok { background: #e7f4ee; color: #1f6b4a; }
 .ws-pill-warn { background: #fff1e6; color: #b4530b; }
 a.ws-btn { text-decoration: none; }
+
+
+/* ===== Changes: home background colour, CSV file box, HR page ===== */
+
+/* Home page: the soft orange background becomes the same soft purple as the About section */
+.marketing-page {
+  background:
+    radial-gradient(ellipse at 81% 24%, rgb(243 232 255 / 70%), transparent 34%),
+    linear-gradient(180deg, #f7f0fc, #fbf8fd);
+}
+
+/* Import team: file chooser styled like the other form fields */
+.ws-csv-form { align-items: flex-end; }
+.ws-csv-field { flex: 1 1 280px; }
+.ws-csv-form .ws-csv-field .ws-input { flex: none; width: 100%; }
+.ws-file-input { padding: 4px 6px; cursor: pointer; }
+.ws-file-input::file-selector-button {
+  margin-right: 10px;
+  padding: 6px 12px;
+  border: 1px solid var(--ws-border-strong);
+  border-radius: 6px;
+  background: var(--ws-accent-soft);
+  color: var(--ws-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ws-file-input::file-selector-button:hover { background: #e8ddd2; }
+.ws-card-head-actions .ws-card-tools { margin-left: auto; }

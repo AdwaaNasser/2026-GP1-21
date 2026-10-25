@@ -23,7 +23,7 @@ const pages = {
   '/set-password': App,
   '/forgot-password': ForgotPassword,
   '/reset-password': ResetPassword,
-  '/dashboard/hr': Dashboard,
+  '/dashboard/hr': () => <Dashboard role="HR" />,
   '/dashboard/manager': () => <DashboardRouter role="Manager" />,
   '/dashboard/employee': () => <DashboardRouter role="Employee" />,
   '/manager/projects': ManagerProjects,
