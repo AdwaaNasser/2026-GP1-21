@@ -25,6 +25,7 @@ INSTALLED_APPS = [
     'accounts',
     'workspace',
     'goals',
+    'recommendations',
 ]
 
 MIDDLEWARE = [
