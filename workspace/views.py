@@ -200,7 +200,7 @@ class ProjectMembersView(APIView):
         )
         employees = User.objects.filter(
             org_id=request.user.org_id,
-            job_title='Employee',
+            employee_record__system_role='Employee',
         ).order_by('first_name', 'last_name')
         return Response([
             {
@@ -319,4 +319,3 @@ class TaskDetailView(APIView):
             return not_found('Task not found.')
         task.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
-
