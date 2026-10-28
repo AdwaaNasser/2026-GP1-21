@@ -149,7 +149,7 @@ export default function Dashboard({ role }) {
     return <main className="page"><section className="card">Opening your workspace…</section></main>;
   }
 
-  const departmentNames = [...new Set(employees.map((employee) => employee.department?.name).filter(Boolean))];
+  const departmentNames = [...new Set(employees.map((employee) => employee.department.name))];
   const managerCount = employees.filter((employee) => employee.role === 'Manager').length;
   const employeeCount = employees.filter((employee) => employee.role === 'Employee').length;
   const hrCount = employees.filter((employee) => employee.role === 'HR').length;
@@ -176,8 +176,7 @@ export default function Dashboard({ role }) {
                     <h2>Bring your team into Bayyinah</h2>
                     <p className="description">
                       Import your employee list. Review the department summary, then send
-                      secure invitations when everything looks right. Each row must include
-                      a hire_date in YYYY-MM-DD format to calculate years of service.
+                      secure invitations when everything looks right.
                     </p>
                   </div>
                   <a className="button button-primary" href="#upload">Import team</a>
@@ -304,7 +303,7 @@ export default function Dashboard({ role }) {
               <>
                 <div className="aside-stat"><span>Signed in as</span><strong>{role}</strong></div>
                 <div className="aside-stat"><span>Visible records</span><strong>{employees.length}</strong></div>
-                <div className="aside-stat"><span>Department</span><strong>{employees[0]?.department?.name || '—'}</strong></div>
+                <div className="aside-stat"><span>Department</span><strong>{employees[0]?.department.name || '—'}</strong></div>
               </>
             )}
           </section>
@@ -344,7 +343,7 @@ function EmployeeTable({ employees }) {
               <td>{displayName(employee)}</td>
               <td>{employee.email}</td>
               <td><span className={`table-role${employee.role === 'Manager' ? ' manager' : ''}`}>{employee.role}</span></td>
-              <td>{employee.department?.name || '—'}</td>
+              <td>{employee.department.name}</td>
             </tr>
           ))}
         </tbody>
@@ -390,7 +389,7 @@ function PeopleTable({ people }) {
               <td className="ws-task-title">{displayName(person)}</td>
               <td>{person.email}</td>
               <td>{person.role}</td>
-              <td>{person.department?.name || '—'}</td>
+              <td>{person.department.name}</td>
             </tr>
           ))}
         </tbody>
@@ -520,4 +519,3 @@ export function DashboardRouter({ role }) {
 
   return <WorkspaceOverview role={role} />;
 }
-

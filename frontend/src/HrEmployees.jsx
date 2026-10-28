@@ -1,0 +1,402 @@
+import { useEffect, useMemo, useState } from 'react';
+import Shell, { Banner } from './Shell.jsx';
+import {
+  Avatar,
+  EmptyState,
+  Icon,
+  Modal,
+  TableSkeleton,
+  formatDate,
+  getJson,
+  sendJson,
+  useBanner,
+} from './taskUi.jsx';
+import { displayName } from './api.js';
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function EmployeeForm({ employee, departments, onSubmit, onCancel }) {
+  const isEdit = Boolean(employee);
+  const [form, setForm] = useState(
+    isEdit
+      ? {
+          first_name: employee.first_name,
+          last_name: employee.last_name,
+          job_title: employee.job_title || '',
+          gender: employee.gender || 'Male',
+          allowed_absence_days: employee.allowed_absence_days ?? 15,
+          hire_date: employee.hire_date || '',
+          department_id: String(employee.department?.id || ''),
+          department_name: '',
+        }
+      : {
+          first_name: '',
+          last_name: '',
+          email: '',
+          role: 'Employee', // الخيارات: HR أو Employee
+          job_title: '',
+          gender: 'Male',
+          allowed_absence_days: 15,
+          department_id: departments.length === 1 ? String(departments[0].id) : '',
+          department_name: '',
+        },
+  );
+
+  // حالة لتحديد ما إذا كان المستخدم يكتب قسماً جديداً أم يختار من القائمة
+  const [isCustomDept, setIsCustomDept] = useState(false);
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  function setField(name, value) {
+    setForm((current) => ({ ...current, [name]: value }));
+  }
+
+  function validate() {
+    if (!form.first_name.trim()) return 'First name is required.';
+    if (!isEdit && !form.last_name.trim()) return 'Last name is required.';
+    if (!isEdit && !form.email.trim()) return 'Email is required.';
+    if (!isEdit && !EMAIL_PATTERN.test(form.email.trim())) return 'Enter a valid email address.';
+    
+    // المسمى الوظيفي إلزامي
+    if (!form.job_title.trim()) return 'Job title is required.';
+    
+    if (!form.gender) return 'Gender is required.';
+    if (form.allowed_absence_days === '' || Number(form.allowed_absence_days) < 0) {
+      return 'Enter valid allowed absence days.';
+    }
+    if (!isEdit && !form.hire_date) return 'Hire date is required.';
+
+    // التحقق من اختيار قسم أو كتابة اسم قسم جديد
+    if (isCustomDept) {
+      if (!form.department_name.trim()) return 'Enter a new department name.';
+    } else {
+      if (!form.department_id) return 'Choose a department or enter a new one.';
+    }
+
+    return '';
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    const problem = validate();
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    setError('');
+    setSaving(true);
+    try {
+      // إعداد البيانات المرسلة للباك إند
+      const payload = isEdit
+        ? {
+            first_name: form.first_name.trim(),
+            last_name: form.last_name.trim(),
+            job_title: form.job_title.trim(),
+            gender: form.gender,
+            allowed_absence_days: Number(form.allowed_absence_days),
+            hire_date: form.hire_date,
+            ...(isCustomDept
+              ? { department_name: form.department_name.trim() }
+              : { department_id: Number(form.department_id) }),
+          }
+        : {
+            first_name: form.first_name.trim(),
+            last_name: form.last_name.trim(),
+            email: form.email.trim(),
+            role: form.role,
+            job_title: form.job_title.trim(),
+            gender: form.gender,
+            allowed_absence_days: Number(form.allowed_absence_days),
+            ...(isCustomDept
+              ? { department_name: form.department_name.trim() }
+              : { department_id: Number(form.department_id) }),
+          };
+
+      await onSubmit(payload);
+    } catch (failure) {
+      setError(failure.message || 'The employee could not be saved.');
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form className="ws-form" onSubmit={submit} noValidate>
+      {error && <div className="ws-form-error" role="alert">{error}</div>}
+
+      <div className="ws-form-grid">
+        <label className="ws-field">
+          <span className="ws-label">First name</span>
+          <input className="ws-input" value={form.first_name} maxLength={255} autoFocus onChange={(e) => setField('first_name', e.target.value)} />
+        </label>
+        <label className="ws-field">
+          <span className="ws-label">Last name</span>
+          <input className="ws-input" value={form.last_name} maxLength={255} onChange={(e) => setField('last_name', e.target.value)} />
+        </label>
+      </div>
+
+      {!isEdit && (
+        <div className="ws-form-grid">
+          <label className="ws-field">
+            <span className="ws-label">Email</span>
+            <input className="ws-input" type="email" value={form.email} onChange={(e) => setField('email', e.target.value)} />
+          </label>
+          <label className="ws-field">
+            <span className="ws-label">Role</span>
+            <select className="ws-select" value={form.role} onChange={(e) => setField('role', e.target.value)}>
+              <option value="Employee">Employee</option>
+              <option value="HR">HR</option>
+            </select>
+          </label>
+        </div>
+      )}
+
+      <div className="ws-form-grid">
+        <label className="ws-field">
+          <span className="ws-label">Job title <span style={{ color: 'red' }}>*</span></span>
+          <input className="ws-input" value={form.job_title} maxLength={100} onChange={(e) => setField('job_title', e.target.value)} placeholder="e.g. Software Engineer" />
+        </label>
+        <label className="ws-field">
+          <span className="ws-label">Gender</span>
+          <select className="ws-select" value={form.gender} onChange={(e) => setField('gender', e.target.value)}>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+          </select>
+        </label>
+      </div>
+
+      <div className="ws-form-grid">
+        <label className="ws-field">
+          <span className="ws-label">Allowed Absence Days</span>
+          <input className="ws-input" type="number" min="0" value={form.allowed_absence_days} onChange={(e) => setField('allowed_absence_days', e.target.value)} />
+        </label>
+        <label className="ws-field">
+          <span className="ws-label">Hire date</span>
+          <input className="ws-input" type="date" value={form.hire_date} onChange={(e) => setField('hire_date', e.target.value)} />
+        </label>
+      </div>
+
+      {/* حقل القسم المطور (مرن بين الاختيار والكتابة) */}
+      <label className="ws-field">
+        <span className="ws-label">Department</span>
+        {!isCustomDept ? (
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <select
+              className="ws-select"
+              value={form.department_id}
+              onChange={(e) => {
+                if (e.target.value === 'NEW_DEPT') {
+                  setIsCustomDept(true);
+                  setField('department_id', '');
+                } else {
+                  setField('department_id', e.target.value);
+                }
+              }}
+              style={{ flex: 1 }}
+            >
+              <option value="">Choose a department</option>
+              {departments.map((department) => (
+                <option key={department.id} value={department.id}>
+                  {department.name}
+                </option>
+              ))}
+              <option value="NEW_DEPT" style={{ fontWeight: 'bold' }}>
+                + Add new department...
+              </option>
+            </select>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <input
+              className="ws-input"
+              placeholder="Enter new department name"
+              value={form.department_name}
+              onChange={(e) => setField('department_name', e.target.value)}
+              autoFocus
+              style={{ flex: 1 }}
+            />
+            <button
+              type="button"
+              className="ws-btn ws-btn-secondary"
+              onClick={() => {
+                setIsCustomDept(false);
+                setField('department_name', '');
+              }}
+            >
+              Select existing
+            </button>
+          </div>
+        )}
+      </label>
+
+      {!isEdit && (
+        <p className="ws-hint">An invitation email is sent so the new employee can set their own password.</p>
+      )}
+
+      <div className="ws-form-actions">
+        <button className="ws-btn ws-btn-primary" type="submit" disabled={saving}>
+          {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Add employee'}
+        </button>
+        <button className="ws-btn ws-btn-secondary" type="button" onClick={onCancel} disabled={saving}>
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function EmployeesContent() {
+  const { banner, success, failure, clear } = useBanner();
+  const [employees, setEmployees] = useState(null);
+  const [departments, setDepartments] = useState([]);
+  const [search, setSearch] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState(null);
+
+  async function load() {
+    try {
+      const [people, depts] = await Promise.all([
+        getJson('/api/accounts/employees/'),
+        getJson('/api/accounts/departments/'),
+      ]);
+      setEmployees(people);
+      setDepartments(depts);
+    } catch (error) {
+      failure(error);
+      setEmployees((current) => current || []);
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function addEmployee(body) {
+    const result = await sendJson('/api/accounts/team-invite/', 'POST', body);
+    setAdding(false);
+    success(result.message || 'Employee added.');
+    load();
+  }
+
+  async function updateEmployee(body) {
+    await sendJson(`/api/accounts/employees/${editing.id}/`, 'PATCH', body);
+    setEditing(null);
+    success('Employee information updated.');
+    load();
+  }
+
+  const shown = useMemo(() => {
+    const text = search.trim().toLowerCase();
+    if (!text) return employees || [];
+    return (employees || []).filter((person) =>
+      `${displayName(person)} ${person.email} ${person.job_title || ''} ${person.department?.name || ''} ${person.role} ${person.gender || ''}`
+        .toLowerCase()
+        .includes(text),
+    );
+  }, [employees, search]);
+
+  return (
+    <>
+      <Banner message={banner.message} isError={banner.isError} onClose={clear} />
+
+      <div className="ws-toolbar">
+        <label className="ws-search">
+          <Icon name="search" size={15} />
+          <input
+            type="search"
+            placeholder="Search employees"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            aria-label="Search employees"
+          />
+        </label>
+        <button className="ws-btn ws-btn-primary" type="button" onClick={() => setAdding(true)}>
+          <Icon name="plus" size={15} />
+          Add employee
+        </button>
+      </div>
+
+      {employees === null ? (
+        <TableSkeleton />
+      ) : employees.length === 0 ? (
+        <div className="ws-card">
+          <EmptyState icon="users" title="No employees yet">
+            Add your first employee, or import a CSV file from the HR overview.
+          </EmptyState>
+        </div>
+      ) : shown.length === 0 ? (
+        <div className="ws-card">
+          <EmptyState icon="search" title="No employees match your search">
+            Try a different name, email, job title or department.
+          </EmptyState>
+        </div>
+      ) : (
+        <div className="ws-card ws-table-card">
+          <table className="ws-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Role</th>
+                <th>Job title</th>
+                <th>Gender</th>
+                <th>Absence Days</th>
+                <th>Department</th>
+                <th>Hired</th>
+                <th aria-label="Actions" />
+              </tr>
+            </thead>
+            <tbody>
+              {shown.map((person) => (
+                <tr key={person.id}>
+                  <td>
+                    <div className="hr-person">
+                      <Avatar name={displayName(person)} size={28} />
+                      <div>
+                        <div className="ws-task-title">{displayName(person)}</div>
+                        <div className="ws-task-sub">{person.email}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>{person.role}</td>
+                  <td>{person.job_title}</td>
+                  <td>{person.gender || '—'}</td>
+                  <td>{person.allowed_absence_days ?? '—'}</td>
+                  <td>{person.department?.name || '—'}</td>
+                  <td>{formatDate(person.hire_date)}</td>
+                  <td>
+                    <button className="ws-btn ws-btn-secondary ws-btn-sm" type="button" onClick={() => setEditing(person)}>
+                      <Icon name="edit" size={13} />
+                      Edit
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {adding && (
+        <Modal title="Add employee" onClose={() => setAdding(false)}>
+          <EmployeeForm departments={departments} onSubmit={addEmployee} onCancel={() => setAdding(false)} />
+        </Modal>
+      )}
+      {editing && (
+        <Modal title={`Edit ${displayName(editing)}`} onClose={() => setEditing(null)}>
+          <EmployeeForm employee={editing} departments={departments} onSubmit={updateEmployee} onCancel={() => setEditing(null)} />
+        </Modal>
+      )}
+    </>
+  );
+}
+
+export default function HrEmployees() {
+  return (
+    <Shell
+      role="HR"
+      title="Manage employees"
+      subtitle="Add, update and search the people in your organization."
+    >
+      <EmployeesContent />
+    </Shell>
+  );
+}

@@ -3,7 +3,7 @@ const LINKS = [
   ['#burnout', 'Burnout insights'],
   ['#how', 'How it works'],
   ['#about', 'About us'],
-  ['#faq', 'Get to know us'],
+  ['#faq', 'FAQ'],
 ];
 
 export default function SiteHeader() {

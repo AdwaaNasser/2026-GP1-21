@@ -800,4 +800,3 @@ export function TaskPanel({ task, role, onEdit, onAdvance, onReview, projectHref
     </div>
   );
 }
-

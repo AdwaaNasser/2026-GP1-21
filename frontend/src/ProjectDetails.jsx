@@ -255,4 +255,3 @@ export default function ProjectDetails({ role }) {
     </Shell>
   );
 }
-

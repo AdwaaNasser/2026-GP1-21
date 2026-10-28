@@ -2774,7 +2774,6 @@ body { background: linear-gradient(180deg, #fbf1e8 0%, #fdf8f3 100%) fixed; }
 .mk-fact strong { display: block; color: #fff; font-family: Manrope, sans-serif; font-size: clamp(44px, 6vw, 72px); font-weight: 800; line-height: 1; }
 .mk-fact > span { display: block; max-width: 260px; margin-top: 12px; color: #d9c3ea; font-size: 14.5px; line-height: 1.5; }
 .mk-source { margin: 0; padding: 0 0 30px; color: #b99ad1; font-size: 12px; }
-.mk-source a { color: inherit; text-decoration: underline; }
 
 /* steps */
 .mk-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
@@ -2831,95 +2830,3 @@ body { background: linear-gradient(180deg, #fbf1e8 0%, #fdf8f3 100%) fixed; }
   .mk-steps, .mk-facts-grid { grid-template-columns: 1fr; }
   .mk-section { padding: 64px 0; }
 }
-
-/* ---------- Required and invalid fields (formValidation.js) ---------- */
-.is-invalid,
-.ws-input.is-invalid,
-.ws-select.is-invalid,
-.ws-textarea.is-invalid,
-.auth-card input.is-invalid,
-.auth-card select.is-invalid {
-  border-color: #d92d20 !important;
-  background: #fff8f7;
-}
-.is-invalid:focus {
-  outline: 2px solid rgb(217 45 32 / 18%) !important;
-  box-shadow: none !important;
-}
-.field-error-text {
-  display: block;
-  margin-top: 4px;
-  color: #b42318;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.35;
-}
-
-.auth-card select {
-  width: 100%;
-  min-height: 46px;
-  padding: 11px 13px;
-  border: 1px solid #ddd8e1;
-  border-radius: 8px;
-  outline: none;
-  color: var(--ink);
-  background: #fff;
-  font: inherit;
-}
-.auth-card select:focus {
-  border-color: #7a6f66;
-  box-shadow: 0 0 0 3px rgb(128 86 146 / 13%);
-}
-
-/* ---------- HR pages: cards, tools, import ---------- */
-.ws-card-head-actions { align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
-.ws-card-head-actions p { margin-top: 2px; }
-.ws-card-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.ws-csv-form { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; }
-.ws-csv-form .ws-input { flex: 1 1 260px; width: auto; }
-.ws-import-summary { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
-.ws-import-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
-.ws-error-list { margin: 6px 0 0; padding-left: 18px; }
-.ws-row-actions { display: flex; justify-content: flex-end; gap: 6px; }
-.ws-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 9px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-.ws-pill-ok { background: #e7f4ee; color: #1f6b4a; }
-.ws-pill-warn { background: #fff1e6; color: #b4530b; }
-a.ws-btn { text-decoration: none; }
-
-
-/* ===== Changes: home background colour, CSV file box, HR page ===== */
-
-/* Home page: the soft orange background becomes the same soft purple as the About section */
-.marketing-page {
-  background:
-    radial-gradient(ellipse at 81% 24%, rgb(243 232 255 / 70%), transparent 34%),
-    linear-gradient(180deg, #f7f0fc, #fbf8fd);
-}
-
-/* Import team: file chooser styled like the other form fields */
-.ws-csv-form { align-items: flex-end; }
-.ws-csv-field { flex: 1 1 280px; }
-.ws-csv-form .ws-csv-field .ws-input { flex: none; width: 100%; }
-.ws-file-input { padding: 4px 6px; cursor: pointer; }
-.ws-file-input::file-selector-button {
-  margin-right: 10px;
-  padding: 6px 12px;
-  border: 1px solid var(--ws-border-strong);
-  border-radius: 6px;
-  background: var(--ws-accent-soft);
-  color: var(--ws-text);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.ws-file-input::file-selector-button:hover { background: #e8ddd2; }
-.ws-card-head-actions .ws-card-tools { margin-left: auto; }
