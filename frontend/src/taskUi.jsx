@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiRequest, displayName, responseData } from './api.js';
 import Recommendation from './Recommendation.jsx';
+import { createPortal } from 'react-dom';
 
 export const PRIORITIES = [
   ['low', 'Low'],
@@ -37,6 +38,12 @@ export async function sendJson(path, method, body) {
   });
   return responseData(response);
 }
+
+export async function deleteRequest(path) {
+  const response = await apiRequest(path, { method: 'DELETE' });
+  if (!response.ok) await responseData(response);   // يرمي رسالة السيرفر (403 / 404)
+}
+
 
 // ---------- Task rules: names, sorting and filtering (the backend decides what is allowed) ----------
 
@@ -185,7 +192,13 @@ export function useTaskActions({ reload, success }) {
     await reload();
   }
 
-  return { save, review, advance };
+    async function remove(task) {
+    await deleteRequest(`/api/workspace/tasks/${task.id}/`);
+    success('Task deleted.');
+    await reload();
+  }
+
+  return { save, review, advance, remove };
 }
 
 // ---------- Small building blocks: icons, badges, panels, tabs ----------
@@ -348,6 +361,24 @@ export function Drawer(props) {
 // Centered dialog for short forms (projects).
 export function Modal(props) {
   return <Overlay {...props} className="ws-modal" centered />;
+}
+// Styled "are you sure?" dialog. Rendered in document.body so it always sits
+// above any open drawer.
+export function ConfirmDialog({ title, message, confirmLabel = 'Delete', busy = false, onConfirm, onCancel }) {
+  return createPortal(
+    <Modal title={title} onClose={onCancel}>
+      <p className="ws-description">{message}</p>
+      <div className="ws-form-actions">
+        <button className="ws-btn ws-btn-danger" type="button" disabled={busy} onClick={onConfirm}>
+          {confirmLabel}
+        </button>
+        <button className="ws-btn ws-btn-secondary" type="button" disabled={busy} onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </Modal>,
+    document.body,
+  );
 }
 
 // Row of tabs with a count: tabs = [[key, label, count], ...]
@@ -686,10 +717,11 @@ const FEEDBACK_TITLES = {
 //  - employee: move the task forward / submit for review
 //  - manager:  edit, approve, or request changes
 // Handlers (onAdvance, onReview) must throw on a server error; it is shown here.
-export function TaskPanel({ task, role, onEdit, onAdvance, onReview, projectHref }) {
+export function TaskPanel({ task, role, onEdit, onAdvance, onReview, onDelete, projectHref }) {
   const [feedback, setFeedback] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   useEffect(() => {
     setFeedback('');
@@ -799,14 +831,44 @@ export function TaskPanel({ task, role, onEdit, onAdvance, onReview, projectHref
         </div>
       )}
 
-      {role === 'Manager' && onEdit && (
+            {role === 'Manager' && (onEdit || onDelete) && (
         <div className="ws-panel-footer">
-          <button type="button" className="ws-btn ws-btn-secondary" onClick={onEdit}>
-            <Icon name="edit" size={15} />
-            Edit task
-          </button>
+          {onEdit && (
+            <button
+              type="button"
+              className="ws-btn ws-btn-secondary"
+              onClick={onEdit}
+            >
+              Edit task
+            </button>
+          )}
+
+          {onDelete && (
+           <button
+  type="button"
+  className="ws-btn ws-btn-outline-danger"
+  disabled={busy}
+  onClick={() => setConfirmingDelete(true)}
+>
+  Delete task
+</button>
+          )}
         </div>
       )}
+
+{confirmingDelete && (
+  <ConfirmDialog
+    title="Delete task"
+    message={`Delete "${task.title}"? This cannot be undone.`}
+    busy={busy}
+    onCancel={() => setConfirmingDelete(false)}
+    onConfirm={() => {
+      setConfirmingDelete(false);
+      run(() => onDelete(task));
+    }}
+  />
+)}
+
     </div>
   );
 }

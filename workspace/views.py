@@ -3,7 +3,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-
+from django.db import transaction
 from accounts.models import Project, Task, User
 
 from .permissions import PUBLIC, IsManagerOrEmployee, is_employee, is_manager
@@ -72,8 +72,10 @@ def projects_for(user):
 def tasks_for(user):
     tasks = Task.objects.select_related('project__manager__user', 'employee__user')
     if is_manager(user):
-        return tasks.filter(Q(project__manager_id=user.pk) |
-        Q(project__isnull=True))
+        return tasks.filter(
+            Q(project__manager_id=user.pk)
+            | Q(project__isnull=True, employee__manager_id=user.pk)  # مهام بلا مشروع: لموظفيه فقط
+        )
     if is_employee(user):
         return tasks.filter(
             Q(employee_id=user.pk)
@@ -177,7 +179,18 @@ class ProjectDetailView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(project_data(project, request.user, with_tasks=True))
-
+    
+    def delete(self, request, project_id):
+        if not is_manager(request.user):
+            return only_managers()
+        project = self.get_project(request, project_id) 
+        if project is None:
+            return not_found('Project not found.')
+        with transaction.atomic():
+           
+            Task.objects.filter(project=project).delete()
+            project.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 class ProjectMembersView(APIView):
     """Shows the manager who takes part in one of their projects.
@@ -244,7 +257,7 @@ class TaskDetailView(APIView):
             return not_found('Task not found.')
         return Response(task_data(task, request.user))
 
-        employee_write_methods = ('PATCH',)   # status steps only, enforced in patch()
+
 
     def patch(self, request, task_id):
         task = self.get_task(request, task_id)
@@ -309,7 +322,7 @@ class TaskDetailView(APIView):
             task.feedback = feedback
             fields.append('feedback')
         task.save(update_fields=fields)
-        return Response(task_data(request.user and task, request.user))
+        return Response(task_data(task, request.user))
 
     def delete(self, request, task_id):
         if not is_manager(request.user):

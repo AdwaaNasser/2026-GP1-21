@@ -151,13 +151,17 @@ function TasksContent() {
 
       {selected && (
         <Drawer title="Task details" onClose={() => setPanel(null)}>
-          <TaskPanel
-            task={selected}
-            role="Manager"
-            projectHref={(project) => `/manager/project?id=${project.id}`}
-            onEdit={() => setPanel({ type: 'form', task: selected })}
-            onReview={actions.review}
-          />
+<TaskPanel
+  task={selected}
+  role="Manager"
+  projectHref={(project) => `/manager/project?id=${project.id}`}
+  onEdit={() => setPanel({ type: 'form', task: selected })}
+  onReview={actions.review}
+  onDelete={async (task) => {
+    await actions.remove(task);
+    setPanel(null);
+  }}
+/>
         </Drawer>
       )}
 

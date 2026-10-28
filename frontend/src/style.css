@@ -1693,8 +1693,7 @@ tr:last-child td {
    Workspace design system (manager and employee screens).
    Every class here starts with "ws-", so it never clashes with the rules above.
    ========================================================================== */
-
-.ws-app {
+:root {
   --ws-bg: #f6f5f8;
   --ws-surface: #ffffff;
   --ws-border: #e7e4eb;
@@ -1708,7 +1707,9 @@ tr:last-child td {
   --ws-orange: #ec6a1a;
   --ws-radius: 8px;
   --ws-shadow: 0 1px 2px rgb(40 33 52 / 6%);
+}
 
+.ws-app {
   display: grid;
   grid-template-columns: 236px minmax(0, 1fr);
   min-height: 100vh;
@@ -1839,6 +1840,9 @@ tr:last-child td {
 .ws-btn-success:hover:not(:disabled) { background: #19673f; }
 .ws-btn-outline-danger { border-color: #e6b3ad; background: var(--ws-surface); color: #b42318; }
 .ws-btn-outline-danger:hover:not(:disabled) { background: #fdf1f0; }
+
+.ws-btn-danger { background: #b42318; color: #fff; }
+.ws-btn-danger:hover:not(:disabled) { background: #912018; }
 
 .ws-icon-btn {
   display: inline-flex;

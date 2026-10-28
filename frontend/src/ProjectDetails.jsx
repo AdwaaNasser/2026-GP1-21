@@ -20,6 +20,8 @@ import {
   useBanner,
   useEmployees,
   useTaskActions,
+  deleteRequest,
+  ConfirmDialog,
 } from './taskUi.jsx';
 
 function DetailsContent({ role }) {
@@ -32,6 +34,7 @@ function DetailsContent({ role }) {
   const [loadError, setLoadError] = useState('');
   const [panel, setPanel] = useState(null);
   const [editing, setEditing] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   async function loadProject() {
     try {
@@ -55,6 +58,16 @@ function DetailsContent({ role }) {
     success('Project updated.');
     loadProject();
   }
+
+  async function deleteProject() {
+  setConfirmingDelete(false);
+  try {
+    await deleteRequest(`/api/workspace/projects/${projectId}/`);
+    window.location.assign('/manager/projects');
+  } catch (error) {
+    failure(error);
+  }
+}
 
   const backPath = isManager ? '/manager/projects' : '/employee/tasks';
 
@@ -123,6 +136,15 @@ function DetailsContent({ role }) {
             <Icon name="edit" size={15} />
             Edit project
           </button>
+           
+<button
+  className="ws-btn ws-btn-outline-danger"
+  type="button"
+  onClick={() => setConfirmingDelete(true)}
+>
+  <Icon name="x" size={15} />
+  Delete project
+</button>
 
           <button
             className="ws-btn ws-btn-primary"
@@ -186,18 +208,22 @@ function DetailsContent({ role }) {
 
       {selected && (
         <Drawer title="Task details" onClose={() => setPanel(null)}>
-          <TaskPanel
-            task={selected}
-            role={role}
-            projectHref={projectHref}
-            onEdit={
-              isManager
-                ? () => setPanel({ type: 'form', task: selected })
-                : undefined
-            }
-            onReview={actions.review}
-            onAdvance={actions.advance}
-          />
+      <TaskPanel
+  task={selected}
+  role={role}
+  projectHref={projectHref}
+  onEdit={isManager ? () => setPanel({ type: 'form', task: selected }) : undefined}
+  onReview={actions.review}
+  onAdvance={actions.advance}
+  onDelete={
+    isManager
+      ? async (task) => {
+          await actions.remove(task);
+          setPanel(null);
+        }
+      : undefined
+  }
+/>
         </Drawer>
       )}
 
@@ -239,9 +265,27 @@ function DetailsContent({ role }) {
           />
         </Modal>
       )}
+    {isManager && confirmingDelete && (
+  <ConfirmDialog
+    title="Delete project"
+    message={
+      tasks.length
+        ? `Delete "${project.name}" and its ${tasks.length} task${tasks.length === 1 ? '' : 's'}? This cannot be undone.`
+        : `Delete "${project.name}"? This cannot be undone.`
+    }
+    confirmLabel="Delete project"
+    onCancel={() => setConfirmingDelete(false)}
+    onConfirm={deleteProject}
+  />
+)}
+
+
+
     </>
   );
 }
+
+
 
 export default function ProjectDetails({ role }) {
   const crumbs =
