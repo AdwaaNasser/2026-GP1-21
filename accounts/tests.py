@@ -34,7 +34,6 @@ from .permissions import IsHRProfessional
 from .views import (
     CSVEmployeeImportView,
     CSVImportInviteAllView,
-    EmployeeDetailView,
     LoginView,
     PasswordResetConfirmView,
     PasswordResetRequestView,
@@ -42,7 +41,6 @@ from .views import (
     SetPasswordView,
     TeamInviteView,
     _change_password,
-    _create_account,
     _employees_visible_to,
     _send_invitation_email,
     _send_password_reset_email,
@@ -105,24 +103,6 @@ class SchemaTests(SimpleTestCase):
         user = User(first_name='Raghad', last_name='Almutairi')
         self.assertEqual(user.display_name, 'Raghad Almutairi')
 
-    def test_employee_hire_date_is_required_by_the_schema(self):
-        hire_date = User._meta.get_field('hire_date')
-        self.assertFalse(hire_date.null)
-        self.assertFalse(hire_date.blank)
-        self.assertNotIn(
-            'hire_date',
-            {field.name for field in Employee._meta.fields},
-        )
-
-    def test_job_title_is_the_user_role(self):
-        for role in ('HR', 'Employee', 'Manager'):
-            with self.subTest(role=role):
-                self.assertEqual(User(job_title=role).role, role)
-
-    def test_employee_system_role_only_allows_hr_and_employee(self):
-        choices = dict(Employee._meta.get_field('system_role').choices)
-        self.assertEqual(set(choices), {'HR', 'Employee'})
-
     def test_organization_setup_requires_separate_names(self):
         serializer = OrganizationSetupSerializer(
             data={
@@ -131,7 +111,6 @@ class SchemaTests(SimpleTestCase):
                 'last_name': 'Almutairi',
                 'email': 'raghad@example.com',
                 'password': 'ValidPassword123!',
-                'hire_date': '2024-01-15',
             },
         )
         with (
@@ -142,22 +121,6 @@ class SchemaTests(SimpleTestCase):
             self.assertTrue(serializer.is_valid(), serializer.errors)
         self.assertEqual(serializer.validated_data['first_name'], 'Raghad')
         self.assertEqual(serializer.validated_data['last_name'], 'Almutairi')
-        self.assertEqual(str(serializer.validated_data['hire_date']), '2024-01-15')
-
-    def test_organization_setup_requires_hire_date(self):
-        serializer = OrganizationSetupSerializer(
-            data={
-                'organization_name': 'Example Org',
-                'first_name': 'Raghad',
-                'last_name': 'Almutairi',
-                'email': 'raghad@example.com',
-                'password': 'ValidPassword123!',
-            },
-        )
-        with patch('accounts.views.User.objects.filter') as filter_users:
-            filter_users.return_value.exists.return_value = False
-            self.assertFalse(serializer.is_valid())
-        self.assertIn('hire_date', serializer.errors)
 
     def test_organization_setup_rejects_combined_name_field(self):
         serializer = OrganizationSetupSerializer(
@@ -166,7 +129,6 @@ class SchemaTests(SimpleTestCase):
                 'full_name': 'Raghad Almutairi',
                 'email': 'raghad@example.com',
                 'password': 'ValidPassword123!',
-                'hire_date': '2024-01-15',
             },
         )
         with patch('accounts.views.User.objects.filter') as filter_users:
@@ -227,7 +189,6 @@ class AccountApiTests(SimpleTestCase):
                     result = _employees_visible_to(user)
                 filter_users.return_value.select_related.assert_called_once_with(
                     'employee_record',
-                    'manager_record',
                     'org',
                 )
                 filter_users.return_value.select_related.return_value.filter.assert_called_once_with(
@@ -421,7 +382,7 @@ class AccountApiTests(SimpleTestCase):
     def test_csv_import_adds_account_ids_for_separate_invite_step(self):
         upload = SimpleUploadedFile(
             'employees.csv',
-            b'email,first_name,last_name,job_title,department,hire_date\nperson@example.com,Person,One,Employee,People,2024-01-15\n',
+            b'email,first_name,last_name,system_role,department\nperson@example.com,Person,One,Employee,People\n',
             content_type='text/csv',
         )
         request = self.factory.post(
@@ -445,53 +406,14 @@ class AccountApiTests(SimpleTestCase):
         self.assertEqual(response.data['summary']['departments'][0]['name'], 'People')
         self.assertEqual(create_account.call_args.kwargs['first_name'], 'Person')
         self.assertEqual(create_account.call_args.kwargs['last_name'], 'One')
-        self.assertEqual(
-            str(create_account.call_args.kwargs['hire_date']),
-            '2024-01-15',
-        )
-
-    def test_csv_import_requires_hire_date_column(self):
-        upload = SimpleUploadedFile(
-            'employees.csv',
-            b'email,first_name,last_name,job_title\nperson@example.com,Person,One,Employee\n',
-            content_type='text/csv',
-        )
-        request = self.factory.post(
-            '/api/accounts/import-csv/',
-            {'file': upload},
-            format='multipart',
-        )
-        force_authenticate(request, user=self.hr_user())
-        response = CSVEmployeeImportView.as_view()(request)
-        self.assertEqual(response.status_code, 400)
-        self.assertIn('hire date', response.data['file'])
-
-    def test_csv_import_rejects_blank_hire_date(self):
-        upload = SimpleUploadedFile(
-            'employees.csv',
-            b'email,first_name,last_name,job_title,hire_date\nperson@example.com,Person,One,Employee,\n',
-            content_type='text/csv',
-        )
-        request = self.factory.post(
-            '/api/accounts/import-csv/',
-            {'file': upload},
-            format='multipart',
-        )
-        force_authenticate(request, user=self.hr_user())
-        with patch('accounts.views.User.objects.filter') as filter_users:
-            filter_users.return_value.exists.return_value = False
-            response = CSVEmployeeImportView.as_view()(request)
-        self.assertEqual(response.status_code, 201)
-        self.assertEqual(len(response.data['errors']), 1)
-        self.assertEqual(response.data['pending_invitation_ids'], [])
 
     def test_csv_import_accepts_and_counts_hr_rows(self):
         upload = SimpleUploadedFile(
             'hr.csv',
             (
-                b'email,first_name,last_name,job_title,department,hire_date\n'
-                b'hr@example.com,Human,Resources,HR,People,2020-01-15\n'
-                b'hr2@example.com,Another,Professional,hr professional,People,2021-02-16\n'
+                b'email,first_name,last_name,system_role,department\n'
+                b'hr@example.com,Human,Resources,HR,People\n'
+                b'hr2@example.com,Another,Professional,hr professional,People\n'
             ),
             content_type='text/csv',
         )
@@ -525,7 +447,7 @@ class AccountApiTests(SimpleTestCase):
     def test_csv_import_rejects_combined_name_column(self):
         upload = SimpleUploadedFile(
             'employees.csv',
-            b'email,full_name,job_title\nperson@example.com,Person One,Employee\n',
+            b'email,full_name,system_role\nperson@example.com,Person One,Employee\n',
             content_type='text/csv',
         )
         request = self.factory.post(
@@ -548,7 +470,6 @@ class AccountApiTests(SimpleTestCase):
                 'first_name': 'Person',
                 'last_name': 'One',
                 'role': 'Employee',
-                'hire_date': '2024-01-15',
             },
             format='json',
         )
@@ -569,77 +490,6 @@ class AccountApiTests(SimpleTestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(create_account.call_args.kwargs['first_name'], 'Person')
         self.assertEqual(create_account.call_args.kwargs['last_name'], 'One')
-        self.assertEqual(
-            str(create_account.call_args.kwargs['hire_date']),
-            '2024-01-15',
-        )
-
-    def test_team_invite_requires_hire_date(self):
-        request = self.factory.post(
-            '/api/accounts/team-invite/',
-            {
-                'email': 'person@example.com',
-                'first_name': 'Person',
-                'last_name': 'One',
-                'role': 'Employee',
-            },
-            format='json',
-        )
-        force_authenticate(request, user=self.hr_user())
-        response = TeamInviteView.as_view()(request)
-        self.assertEqual(response.status_code, 400)
-        self.assertIn('detail', response.data)
-
-    def test_manager_account_is_not_created_as_an_employee(self):
-        user = SimpleNamespace(pk=33)
-        with (
-            patch('accounts.views.User.objects.create_user', return_value=user) as create_user,
-            patch('accounts.views.Employee.objects.create') as create_employee,
-            patch('accounts.views.Manager.objects.create') as create_manager,
-        ):
-            created_user, employee = _create_account(
-                email='manager@example.com',
-                first_name='Manage',
-                last_name='Person',
-                password='Password123!',
-                role='Manager',
-                organization=SimpleNamespace(pk=12),
-                hire_date='2024-01-15',
-            )
-
-        self.assertIs(created_user, user)
-        self.assertIsNone(employee)
-        create_user.assert_called_once()
-        self.assertEqual(create_user.call_args.kwargs['job_title'], 'Manager')
-        self.assertEqual(create_user.call_args.kwargs['hire_date'], '2024-01-15')
-        create_employee.assert_not_called()
-        create_manager.assert_called_once_with(user=user)
-
-    def test_employee_update_saves_hire_date_on_user(self):
-        request = self.factory.patch(
-            '/api/accounts/employees/33/',
-            {'hire_date': '2024-01-15'},
-            format='json',
-        )
-        force_authenticate(request, user=self.hr_user())
-        user = SimpleNamespace(
-            pk=33,
-            email='person@example.com',
-            first_name='Person',
-            last_name='One',
-            role='Employee',
-            job_title='Analyst',
-            hire_date=None,
-            allowed_absence_days=0,
-            department=None,
-            save=MagicMock(),
-        )
-        with patch.object(EmployeeDetailView, 'get_object', return_value=user):
-            response = EmployeeDetailView.as_view()(request, employee_id=33)
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(str(user.hire_date), '2024-01-15')
-        user.save.assert_called_once()
 
     def test_invite_all_uses_ids_without_a_batch_table(self):
         request = self.factory.post(
@@ -665,6 +515,6 @@ class AccountApiTests(SimpleTestCase):
         filter_users.assert_called_once_with(
             user_id=33,
             org_id=12,
-            job_title__in=['Employee', 'Manager', 'HR'],
+            employee_record__system_role__in=['Employee', 'Manager', 'HR'],
         )
         send_email.assert_called_once_with(user)
