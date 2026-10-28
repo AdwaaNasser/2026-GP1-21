@@ -33,6 +33,15 @@ export default function Recommendation({ form, onPick }) {
       .catch((failure) => setError(failure.message));
   }, [open, allSkills.length]);
 
+  // The person picked from the list is whoever the Assignee field holds now.
+  const isChosen = (person) => String(person.employee_id) === String(form.assignee);
+  const chosen = result ? result.recommended.find(isChosen) : null;
+
+  // Old results no longer match once the task details change, so hide them.
+  useEffect(() => {
+    setResult(null);
+  }, [form.title, form.description, form.start_date, form.due_date, hours, wanted]);
+
   const skillName = (id) => (allSkills.find((s) => String(s.id) === String(id)) || {}).name || '';
   const unused = allSkills.filter((s) => !wanted.some((w) => String(w.skill_id) === String(s.id)));
 
@@ -167,6 +176,12 @@ export default function Recommendation({ form, onPick }) {
         </p>
       )}
 
+      {chosen && (
+        <p className="rec-chosen" role="status">
+          {displayName(chosen)} is now the assignee. Press Create task to save.
+        </p>
+      )}
+
       {result && result.recommended.length > 0 && (
         <ol className="rec-list">
           {result.recommended.map((person) => (
@@ -176,10 +191,11 @@ export default function Recommendation({ form, onPick }) {
                 <span className="rec-score">{Math.round(person.score * 100)}% match</span>
                 <button
                   type="button"
-                  className="ws-btn ws-btn-sm ws-btn-primary"
+                  className={`ws-btn ws-btn-sm ${isChosen(person) ? 'ws-btn-secondary' : 'ws-btn-primary'}`}
                   onClick={() => onPick(String(person.employee_id))}
+                  disabled={isChosen(person)}
                 >
-                  Choose
+                  {isChosen(person) ? 'Chosen' : 'Choose'}
                 </button>
               </div>
               <ul className="rec-reasons">
