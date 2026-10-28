@@ -93,15 +93,15 @@ def make_user(org, email, role=None, manager=None, is_manager_row=False):
         email=email,
         password='pass12345',
         org=org,
-        hire_date='2020-01-01',
         first_name=email.split('@')[0].title(),
         last_name='Test',
-        job_title=role or 'HR',
+        job_title=f'{role or "HR"} title',
     )
     if role in {'HR', 'Employee'}:
         Employee.objects.create(
             user=user,
             system_role=role,
+            hire_date='2020-01-01',
             manager=manager,
         )
     if is_manager_row or role == 'Manager':
@@ -178,29 +178,44 @@ class GoalsApiTests(APITestCase):
         for user in (self.sara, self.hr):
             self.assertEqual(self.save_goals(self.two_goals(), user).status_code, 403)
 
-    def test_goal_set_for_a_period_that_already_ended_is_refused(self):
+    def test_goal_for_a_period_that_already_ended_is_allowed(self):
         response = self.save_goals([goal_input('Old', 'M1', '100')])
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 200, response.data)
+        goal = Goal.objects.get(name='Old')
+        self.assertEqual((goal.period_start, goal.period_end), (date(2026, 1, 1), date(2026, 1, 31)))
 
-    def test_started_goal_is_locked_but_future_goal_can_be_replaced(self):
-        self.save_goals([goal_input('Year', 'annual', '50'), goal_input('Later', 'Q4', '50')])
+    def test_goals_can_be_changed_and_removed_until_the_year_ends(self):
+        self.save_goals([goal_input('Year', 'annual', '50'), goal_input('Q', 'Q4', '50')])
         year_goal = Goal.objects.get(name='Year')
-        later = Goal.objects.get(name='Later')
-        # change weights of the started goal -> refused
+        quarter = Goal.objects.get(name='Q')
+        # a goal whose period already started can still change target and weight
         response = self.save_goals([
-            {**goal_input('Year', 'annual', '70'), 'id': year_goal.pk},
-            {**goal_input('Later', 'Q4', '30'), 'id': later.pk},
-        ])
-        self.assertEqual(response.status_code, 400)
-        # remove the started goal -> refused
-        self.assertEqual(self.save_goals([goal_input('New', 'Q4', '100')]).status_code, 400)
-        # replace only the not-yet-started goal -> allowed
-        response = self.save_goals([
-            {**goal_input('Year', 'annual', '50'), 'id': year_goal.pk},
-            goal_input('Replacement', 'Q3', '50'),
+            {**goal_input('Year', 'annual', '70', target='9'), 'id': year_goal.pk},
+            {**goal_input('Q', 'Q4', '30'), 'id': quarter.pk},
         ])
         self.assertEqual(response.status_code, 200, response.data)
-        self.assertFalse(Goal.objects.filter(name='Later').exists())
+        year_goal.refresh_from_db()
+        self.assertEqual((float(year_goal.weight), float(year_goal.target_value)), (70.0, 9.0))
+        # and it can be removed
+        response = self.save_goals([{**goal_input('Year', 'annual', '100'), 'id': year_goal.pk}])
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertFalse(Goal.objects.filter(name='Q').exists())
+
+    def test_changing_the_period_keeps_linked_tasks_and_counts_them_in_the_new_period(self):
+        self.save_goals([goal_input('G', 'Q4', '100', kind='Task-based', target='1')])
+        goal = Goal.objects.get(name='G')
+        task = Task.objects.create(
+            title='Done in Q1', project=self.project, status='completed',
+            employee=Employee.objects.get(pk=self.sara.pk), due_date=date(2026, 2, 10),
+        )
+        TaskGoal.objects.create(task=task, goal=goal)
+        self.assertEqual(self.client.get(f'/employees/{self.sara.pk}/goals/?year=2026').data['goals'][0]['progress'], 0.0)
+        response = self.save_goals([
+            {**goal_input('G', 'Q1', '100', kind='Task-based', target='1'), 'id': goal.pk},
+        ])
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(TaskGoal.objects.filter(goal_id=goal.pk).count(), 1)
+        self.assertEqual(response.data['goals'][0]['progress'], 100.0)
 
     def test_measurement_type_cannot_change(self):
         self.save_goals([goal_input('G', 'Q4', '100')])

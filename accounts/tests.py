@@ -105,23 +105,30 @@ class SchemaTests(SimpleTestCase):
         user = User(first_name='Raghad', last_name='Almutairi')
         self.assertEqual(user.display_name, 'Raghad Almutairi')
 
-    def test_employee_hire_date_is_required_by_the_schema(self):
-        hire_date = User._meta.get_field('hire_date')
+    def test_hire_date_belongs_to_the_employee_only(self):
+        hire_date = Employee._meta.get_field('hire_date')
         self.assertFalse(hire_date.null)
         self.assertFalse(hire_date.blank)
         self.assertNotIn(
             'hire_date',
-            {field.name for field in Employee._meta.fields},
+            {field.name for field in User._meta.fields},
         )
 
-    def test_job_title_is_the_user_role(self):
+    def test_job_title_is_free_text_not_the_role(self):
+        job_title = User._meta.get_field('job_title')
+        self.assertFalse(job_title.choices)
+        self.assertEqual(User(job_title='Senior Network Engineer').role, 'HR')
+
+    def test_role_comes_from_the_employee_system_role(self):
         for role in ('HR', 'Employee', 'Manager'):
             with self.subTest(role=role):
-                self.assertEqual(User(job_title=role).role, role)
+                user = User(user_id=1)
+                user.employee_record = Employee(system_role=role)
+                self.assertEqual(user.role, role)
 
-    def test_employee_system_role_only_allows_hr_and_employee(self):
+    def test_employee_system_role_holds_hr_employee_and_manager(self):
         choices = dict(Employee._meta.get_field('system_role').choices)
-        self.assertEqual(set(choices), {'HR', 'Employee'})
+        self.assertEqual(set(choices), {'HR', 'Employee', 'Manager'})
 
     def test_organization_setup_requires_separate_names(self):
         serializer = OrganizationSetupSerializer(
@@ -421,7 +428,7 @@ class AccountApiTests(SimpleTestCase):
     def test_csv_import_adds_account_ids_for_separate_invite_step(self):
         upload = SimpleUploadedFile(
             'employees.csv',
-            b'email,first_name,last_name,job_title,department,hire_date\nperson@example.com,Person,One,Employee,People,2024-01-15\n',
+            b'email,first_name,last_name,role,job_title,department,hire_date\nperson@example.com,Person,One,Employee,Software Engineer,People,2024-01-15\n',
             content_type='text/csv',
         )
         request = self.factory.post(
@@ -453,7 +460,7 @@ class AccountApiTests(SimpleTestCase):
     def test_csv_import_requires_hire_date_column(self):
         upload = SimpleUploadedFile(
             'employees.csv',
-            b'email,first_name,last_name,job_title\nperson@example.com,Person,One,Employee\n',
+            b'email,first_name,last_name,role\nperson@example.com,Person,One,Employee\n',
             content_type='text/csv',
         )
         request = self.factory.post(
@@ -469,7 +476,7 @@ class AccountApiTests(SimpleTestCase):
     def test_csv_import_rejects_blank_hire_date(self):
         upload = SimpleUploadedFile(
             'employees.csv',
-            b'email,first_name,last_name,job_title,hire_date\nperson@example.com,Person,One,Employee,\n',
+            b'email,first_name,last_name,role,job_title,hire_date\nperson@example.com,Person,One,Employee,Software Engineer,\n',
             content_type='text/csv',
         )
         request = self.factory.post(
@@ -489,9 +496,9 @@ class AccountApiTests(SimpleTestCase):
         upload = SimpleUploadedFile(
             'hr.csv',
             (
-                b'email,first_name,last_name,job_title,department,hire_date\n'
-                b'hr@example.com,Human,Resources,HR,People,2020-01-15\n'
-                b'hr2@example.com,Another,Professional,hr professional,People,2021-02-16\n'
+                b'email,first_name,last_name,role,job_title,department,hire_date\n'
+                b'hr@example.com,Human,Resources,HR,HR Specialist,People,2020-01-15\n'
+                b'hr2@example.com,Another,Professional,hr professional,HR Manager,People,2021-02-16\n'
             ),
             content_type='text/csv',
         )
@@ -525,7 +532,7 @@ class AccountApiTests(SimpleTestCase):
     def test_csv_import_rejects_combined_name_column(self):
         upload = SimpleUploadedFile(
             'employees.csv',
-            b'email,full_name,job_title\nperson@example.com,Person One,Employee\n',
+            b'email,full_name,role\nperson@example.com,Person One,Employee\n',
             content_type='text/csv',
         )
         request = self.factory.post(
@@ -548,6 +555,7 @@ class AccountApiTests(SimpleTestCase):
                 'first_name': 'Person',
                 'last_name': 'One',
                 'role': 'Employee',
+                'job_title': 'Software Engineer',
                 'hire_date': '2024-01-15',
             },
             format='json',
@@ -573,6 +581,59 @@ class AccountApiTests(SimpleTestCase):
             str(create_account.call_args.kwargs['hire_date']),
             '2024-01-15',
         )
+        self.assertEqual(
+            create_account.call_args.kwargs['job_title'],
+            'Software Engineer',
+        )
+
+    def test_team_invite_accepts_hr_professional_role(self):
+        request = self.factory.post(
+            '/api/accounts/team-invite/',
+            {
+                'email': 'hr2@example.com',
+                'first_name': 'Another',
+                'last_name': 'Professional',
+                'role': 'HR Professional',
+                'job_title': 'HR Specialist',
+                'hire_date': '2024-01-15',
+            },
+            format='json',
+        )
+        force_authenticate(request, user=self.hr_user())
+        user = SimpleNamespace(email='hr2@example.com')
+        with (
+            patch('accounts.views.User.objects.filter') as filter_users,
+            patch(
+                'accounts.views._create_account',
+                return_value=(user, MagicMock()),
+            ) as create_account,
+            patch('accounts.views.transaction.atomic', return_value=nullcontext()),
+            patch('accounts.views._send_invitation_email'),
+        ):
+            filter_users.return_value.exists.return_value = False
+            response = TeamInviteView.as_view()(request)
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(create_account.call_args.kwargs['role'], 'HR')
+
+    def test_team_invite_requires_job_title(self):
+        request = self.factory.post(
+            '/api/accounts/team-invite/',
+            {
+                'email': 'person@example.com',
+                'first_name': 'Person',
+                'last_name': 'One',
+                'role': 'Employee',
+                'hire_date': '2024-01-15',
+            },
+            format='json',
+        )
+        force_authenticate(request, user=self.hr_user())
+        with patch('accounts.views.User.objects.filter') as filter_users:
+            filter_users.return_value.exists.return_value = False
+            response = TeamInviteView.as_view()(request)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('job_title', response.data)
 
     def test_team_invite_requires_hire_date(self):
         request = self.factory.post(
@@ -590,7 +651,7 @@ class AccountApiTests(SimpleTestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn('detail', response.data)
 
-    def test_manager_account_is_not_created_as_an_employee(self):
+    def test_manager_account_has_manager_and_employee_rows(self):
         user = SimpleNamespace(pk=33)
         with (
             patch('accounts.views.User.objects.create_user', return_value=user) as create_user,
@@ -605,23 +666,31 @@ class AccountApiTests(SimpleTestCase):
                 role='Manager',
                 organization=SimpleNamespace(pk=12),
                 hire_date='2024-01-15',
+                job_title='Cyber Security Manager',
             )
 
         self.assertIs(created_user, user)
-        self.assertIsNone(employee)
         create_user.assert_called_once()
-        self.assertEqual(create_user.call_args.kwargs['job_title'], 'Manager')
-        self.assertEqual(create_user.call_args.kwargs['hire_date'], '2024-01-15')
-        create_employee.assert_not_called()
+        self.assertEqual(
+            create_user.call_args.kwargs['job_title'],
+            'Cyber Security Manager',
+        )
+        self.assertNotIn('hire_date', create_user.call_args.kwargs)
+        create_employee.assert_called_once_with(
+            user=user,
+            system_role='Manager',
+            hire_date='2024-01-15',
+        )
         create_manager.assert_called_once_with(user=user)
 
-    def test_employee_update_saves_hire_date_on_user(self):
+    def test_employee_update_saves_hire_date_on_employee(self):
         request = self.factory.patch(
             '/api/accounts/employees/33/',
-            {'hire_date': '2024-01-15'},
+            {'hire_date': '2024-01-15', 'job_title': 'Senior Network Engineer'},
             format='json',
         )
         force_authenticate(request, user=self.hr_user())
+        employee_record = SimpleNamespace(hire_date=None, save=MagicMock())
         user = SimpleNamespace(
             pk=33,
             email='person@example.com',
@@ -629,16 +698,19 @@ class AccountApiTests(SimpleTestCase):
             last_name='One',
             role='Employee',
             job_title='Analyst',
-            hire_date=None,
+            employee_record=employee_record,
             allowed_absence_days=0,
             department=None,
             save=MagicMock(),
+            get_role_display=lambda: 'Employee',
         )
         with patch.object(EmployeeDetailView, 'get_object', return_value=user):
             response = EmployeeDetailView.as_view()(request, employee_id=33)
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(str(user.hire_date), '2024-01-15')
+        self.assertEqual(str(employee_record.hire_date), '2024-01-15')
+        employee_record.save.assert_called_once_with(update_fields=['hire_date'])
+        self.assertEqual(user.job_title, 'Senior Network Engineer')
         user.save.assert_called_once()
 
     def test_invite_all_uses_ids_without_a_batch_table(self):
@@ -662,9 +734,9 @@ class AccountApiTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['invited'], 1)
         self.assertEqual(response.data['remaining_ids'], [])
-        filter_users.assert_called_once_with(
-            user_id=33,
-            org_id=12,
-            job_title__in=['Employee', 'Manager', 'HR'],
+        filter_users.assert_called_once()
+        self.assertEqual(
+            filter_users.call_args.kwargs,
+            {'user_id': 33, 'org_id': 12},
         )
         send_email.assert_called_once_with(user)

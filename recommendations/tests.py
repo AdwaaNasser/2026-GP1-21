@@ -89,8 +89,8 @@ class SemanticTests(SimpleTestCase):
 
 def make_user(org, email, role, department='IT'):
     return User.objects.create_user(
-        email=email, password='Pass12345', org=org, hire_date=date(2024, 1, 1),
-        first_name=email.split('@')[0].title(), last_name='Test', job_title=role,
+        email=email, password='Pass12345', org=org,
+        first_name=email.split('@')[0].title(), last_name='Test', job_title=f'{role} title',
         department=department,
     )
 
@@ -111,7 +111,7 @@ class RecommendApiTests(APITestCase):
 
         def employee(name, boss, department='IT'):
             user = make_user(org, f'{name}@acme.test', 'Employee', department)
-            return Employee.objects.create(user=user, system_role='Employee', manager=boss)
+            return Employee.objects.create(user=user, system_role='Employee', hire_date=date(2024, 1, 1), manager=boss)
 
         cls.sara = employee('sara', boss1)
         cls.huda = employee('huda', boss1)
@@ -220,7 +220,7 @@ class RecommendApiTests(APITestCase):
         # HR invites employees with a department but no manager link: they are
         # still in the manager's Assignee list, so they must be recommended too.
         user = make_user(self.maha.user.org, 'lina@acme.test', 'Employee')
-        lina = Employee.objects.create(user=user, system_role='Employee')
+        lina = Employee.objects.create(user=user, system_role='Employee', hire_date=date(2024, 1, 1))
         EmployeeSkill.objects.create(employee=lina, skill=self.python, skill_level='advanced')
         names = [r['first_name'] for r in self.ask(self.manager1).data['recommended']]
         self.assertIn('Lina', names)
@@ -279,7 +279,7 @@ class RecommendApiTests(APITestCase):
         for i in range(6):  # 6 more free Python developers: 8 eligible in total
             person = Employee.objects.create(
                 user=make_user(self.maha.user.org, f'dev{i}@acme.test', 'Employee'),
-                system_role='Employee')
+                system_role='Employee', hire_date=date(2024, 1, 1))
             EmployeeSkill.objects.create(employee=person, skill=self.python, skill_level='expert')
         data = self.ask(self.manager1).data
         self.assertEqual(len(data['recommended']), 5)
@@ -315,7 +315,7 @@ class RecommendApiTests(APITestCase):
         # A second company with its own skill: manager1 must not see or use it.
         other_org = Organization.objects.create(name='Other Co')
         stranger = Employee.objects.create(
-            user=make_user(other_org, 'x@other.test', 'Employee'), system_role='Employee')
+            user=make_user(other_org, 'x@other.test', 'Employee'), system_role='Employee', hire_date=date(2024, 1, 1))
         cobol = Skill.objects.create(name='Cobol')
         EmployeeSkill.objects.create(employee=stranger, skill=cobol, skill_level='expert')
         self.client.force_authenticate(self.manager1)

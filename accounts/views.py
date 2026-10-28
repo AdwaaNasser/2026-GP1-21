@@ -86,27 +86,26 @@ def _create_account(
     department=None,
     gender=None,
     allowed_absence_days=None,
+    job_title=None,
 ):
     user = User.objects.create_user(
         email=email,
         password=password,
         first_name=first_name,
         last_name=last_name,
-        job_title=role,
-        hire_date=hire_date,
+        job_title=job_title,
         org=organization,
         department=department,
         gender=gender,
         allowed_absence_days=allowed_absence_days,
     )
+    employee = Employee.objects.create(
+        user=user,
+        system_role=role,
+        hire_date=hire_date,
+    )
     if role == 'Manager':
         Manager.objects.create(user=user)
-        employee = None
-    else:
-        employee = Employee.objects.create(
-            user=user,
-            system_role=role,
-        )
     return user, employee
 
 
@@ -124,6 +123,11 @@ def _employees_visible_to(user):
     return employees.filter(user_id=user.pk)
 
 
+def _hire_date_of(user):
+    employee = getattr(user, 'employee_record', None)
+    return employee.hire_date if employee is not None else None
+
+
 def _employee_data(user):
     return {
         'id': user.pk,
@@ -131,8 +135,9 @@ def _employee_data(user):
         'first_name': user.first_name or '',
         'last_name': user.last_name or '',
         'role': user.role,
-        'job_title': user.job_title,
-        'hire_date': user.hire_date,
+        'role_label': user.get_role_display(),
+        'job_title': user.job_title or '',
+        'hire_date': _hire_date_of(user),
         'allowed_absence_days': user.allowed_absence_days or 0,
         'department': {
             'id': user.department or '',
@@ -156,10 +161,10 @@ def _normalize_csv_header(header):
         'last': 'last_name',
         'department_name': 'department',
         'title': 'job_title',
+        'jobtitle': 'job_title',
         'hiredate': 'hire_date',
-        'role': 'job_title',
-        'role_name': 'job_title',
-        'system_role': 'job_title',
+        'role_name': 'role',
+        'system_role': 'role',
         'absence_days': 'allowed_absence_days',
         'password_hash': 'password',
         'passwordhash': 'password',
@@ -390,6 +395,7 @@ class CSVEmployeeImportView(APIView):
             'email',
             'first_name',
             'last_name',
+            'role',
             'job_title',
             'department',
             'gender',
@@ -403,6 +409,7 @@ class CSVEmployeeImportView(APIView):
             )
         if (
             'email' not in headers
+            or 'role' not in headers
             or 'job_title' not in headers
             or 'first_name' not in headers
             or 'last_name' not in headers
@@ -411,8 +418,8 @@ class CSVEmployeeImportView(APIView):
             return Response(
                 {
                     'file': (
-                        'CSV needs email, first name, last name, job title, '
-                        'and hire date columns.'
+                        'CSV needs email, first name, last name, role, '
+                        'job title, and hire date columns.'
                     )
                 },
                 status=status.HTTP_400_BAD_REQUEST,
@@ -447,7 +454,7 @@ class CSVEmployeeImportView(APIView):
                     raise serializers.ValidationError('Enter a first name.')
                 if not last_name:
                     raise serializers.ValidationError('Enter a last name.')
-                role_value = row.get('job_title', '').strip().casefold()
+                role_value = row.get('role', '').strip().casefold()
                 role = {
                     'employee': 'Employee',
                     'manager': 'Manager',
@@ -456,7 +463,13 @@ class CSVEmployeeImportView(APIView):
                 }.get(role_value)
                 if role is None:
                     raise serializers.ValidationError(
-                        'Job title must be Employee, Manager, or HR.'
+                        'Role must be Employee, Manager, or HR.'
+                    )
+                if not row.get('job_title', '').strip():
+                    raise serializers.ValidationError('Enter a job title.')
+                if len(row.get('job_title', '')) > 255:
+                    raise serializers.ValidationError(
+                        'Job title must be 255 characters or fewer.'
                     )
                 if email.casefold() in seen_emails:
                     raise serializers.ValidationError(
@@ -484,6 +497,7 @@ class CSVEmployeeImportView(APIView):
                     'first_name': first_name,
                     'last_name': last_name,
                     'role': role,
+                    'job_title': row.get('job_title') or None,
                     'department': row.get('department') or None,
                     'gender': row.get('gender') or None,
                     'hire_date': date,
@@ -502,6 +516,7 @@ class CSVEmployeeImportView(APIView):
                         last_name=row['last_name'],
                         password=None,
                         role=row['role'],
+                        job_title=row['job_title'],
                         organization=request.user.org,
                         department=row['department'],
                         gender=row['gender'],
@@ -574,9 +589,9 @@ class CSVImportInviteAllView(APIView):
 
         for employee_id in employee_ids:
             user = User.objects.filter(
+                Q(employee_record__isnull=False) | Q(manager_record__isnull=False),
                 user_id=employee_id,
                 org_id=request.user.org_id,
-                job_title__in=['Employee', 'Manager', 'HR'],
             ).first()
             if user is None or user.has_usable_password():
                 errors.append({
@@ -642,10 +657,15 @@ class TeamInviteView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        role = str(request.data.get('role', 'Employee')).strip().title()
-        if role not in {'Employee', 'Manager'}:
+        role = {
+            'employee': 'Employee',
+            'manager': 'Manager',
+            'hr': 'HR',
+            'hr professional': 'HR',
+        }.get(str(request.data.get('role', 'Employee')).strip().casefold())
+        if role is None:
             return Response(
-                {'role': 'Role must be Employee or Manager.'},
+                {'role': 'Role must be Employee, Manager, or HR Professional.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         if User.objects.filter(email__iexact=email).exists():
@@ -657,6 +677,17 @@ class TeamInviteView(APIView):
         if department and len(department) > 255:
             return Response(
                 {'department': 'Department must be 255 characters or fewer.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        job_title = str(request.data.get('job_title', '')).strip()
+        if not job_title:
+            return Response(
+                {'job_title': 'Enter a job title.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if len(job_title) > 255:
+            return Response(
+                {'job_title': 'Job title must be 255 characters or fewer.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -671,6 +702,7 @@ class TeamInviteView(APIView):
                     organization=request.user.org,
                     hire_date=hire_date,
                     department=department,
+                    job_title=job_title,
                 )
                 _send_invitation_email(user)
         except (smtplib.SMTPException, OSError):
@@ -772,6 +804,7 @@ class EmployeeDetailView(APIView):
                 allow_null=True,
             ),
             'hire_date': serializers.DateField(required=False),
+            'job_title': serializers.CharField(max_length=255, required=False),
         }
         invalid_fields = set(request.data) - set(fields)
         if invalid_fields:
@@ -783,12 +816,20 @@ class EmployeeDetailView(APIView):
         serializer = serializers.Serializer(data=request.data)
         serializer.fields.update(fields)
         serializer.is_valid(raise_exception=True)
-        for field, value in serializer.validated_data.items():
-            if field == 'hire_date':
-                user.hire_date = value
-            else:
-                setattr(user, field, value)
+        data = dict(serializer.validated_data)
+        hire_date = data.pop('hire_date', None)
+        if 'job_title' in data and not data['job_title'].strip():
+            return Response(
+                {'job_title': 'Enter a job title.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        for field, value in data.items():
+            setattr(user, field, value)
         user.save()
+        if hire_date is not None:
+            employee = user.employee_record
+            employee.hire_date = hire_date
+            employee.save(update_fields=['hire_date'])
         return Response(_employee_data(user))
 
 

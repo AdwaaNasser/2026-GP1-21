@@ -100,22 +100,6 @@ class EmployeeGoalsView(APIView):
                 seen.add(item['id'])
                 if goal.type != item['type']:
                     errors.append(f'Goal {number}: the measurement type cannot be changed.')
-                if goal.period_start <= today and (
-                    goal.time_period != item['period']
-                    or goal.target_value != item['target']
-                    or goal.weight != item['weight']
-                ):
-                    errors.append(
-                        f'Goal {number}: its period has started, so its target, '
-                        'weight and period can no longer change.'
-                    )
-            elif end < today:
-                errors.append(f'Goal {number}: its period has already ended.')
-        for goal in existing.values():
-            if goal.pk not in seen and goal.period_start <= today:
-                errors.append(
-                    f'"{goal.name}" cannot be removed because its period has started.'
-                )
         return errors
 
     def save_set(self, manager_user, employee, year, items, existing, today):

@@ -16,14 +16,14 @@ import { apiRequest, displayName, responseData } from './api.js';
 import { validatedSubmit } from './formValidation.js';
 
 const BATCH_KEY = 'bayyinahCsvImportV3';
-const JOB_TITLES = ['HR Professional', 'Employee', 'Manager'];
+const ROLES = ['HR Professional', 'Employee', 'Manager'];
 const GENDERS = ['Male', 'Female'];
 
 const CSV_TEMPLATE = [
-  'email,first_name,last_name,job_title,gender,department,hire_date,allowed_absence_days',
-  'sara@example.com,Sara,Alharbi,Employee,Female,Engineering,2024-01-15,21',
-  'omar@example.com,Omar,Khalid,Manager,Male,Operations,2022-03-01,21',
-  'lina@example.com,Lina,Faisal,HR Professional,Female,People,2021-06-10,21',
+  'email,first_name,last_name,role,job_title,gender,department,hire_date,allowed_absence_days',
+  'sara@example.com,Sara,Alharbi,Employee,Software Engineer,Female,Engineering,2024-01-15,21',
+  'omar@example.com,Omar,Khalid,Manager,Operations Manager,Male,Operations,2022-03-01,21',
+  'lina@example.com,Lina,Faisal,HR Professional,HR Specialist,Female,People,2021-06-10,21',
 ].join('\n');
 
 function downloadTemplate() {
@@ -45,7 +45,8 @@ function PersonForm({ person, departments, onSubmit, onCancel }) {
           first_name: person.first_name,
           last_name: person.last_name,
           email: person.email,
-          job_title: person.job_title_label,
+          role: person.role_label,
+          job_title: person.job_title || '',
           gender: person.gender || '',
           hire_date: person.hire_date || '',
           allowed_absence_days: String(person.allowed_absence_days ?? ''),
@@ -55,7 +56,8 @@ function PersonForm({ person, departments, onSubmit, onCancel }) {
           first_name: '',
           last_name: '',
           email: '',
-          job_title: 'Employee',
+          role: 'Employee',
+          job_title: '',
           gender: '',
           hire_date: '',
           allowed_absence_days: '',
@@ -76,13 +78,14 @@ function PersonForm({ person, departments, onSubmit, onCancel }) {
       const shared = {
         first_name: form.first_name.trim(),
         last_name: form.last_name.trim(),
+        job_title: form.job_title.trim(),
         gender: form.gender,
         hire_date: form.hire_date,
         allowed_absence_days: Number(form.allowed_absence_days),
         department: form.department.trim(),
       };
       await onSubmit(
-        isEdit ? shared : { ...shared, email: form.email.trim(), role: form.job_title },
+        isEdit ? shared : { ...shared, email: form.email.trim(), role: form.role },
       );
     } catch (failure) {
       setError(failure.message || 'The person could not be saved.');
@@ -90,7 +93,7 @@ function PersonForm({ person, departments, onSubmit, onCancel }) {
     }
   }
 
-  const needsDepartment = form.job_title !== 'HR Professional';
+  const needsDepartment = form.role !== 'HR Professional';
 
   return (
     <form className="ws-form" onSubmit={validatedSubmit(submit)} noValidate>
@@ -113,14 +116,21 @@ function PersonForm({ person, departments, onSubmit, onCancel }) {
           <input className="ws-input" type="email" value={form.email} maxLength={255} required readOnly={isEdit} onChange={(e) => setField('email', e.target.value)} />
         </label>
         <label className="ws-field">
-          <span className="ws-label">Job title</span>
+          <span className="ws-label">Role</span>
           {isEdit ? (
-            <input className="ws-input" value={form.job_title} readOnly />
+            <input className="ws-input" value={form.role} readOnly />
           ) : (
-            <select className="ws-select" value={form.job_title} required onChange={(e) => setField('job_title', e.target.value)}>
-              {JOB_TITLES.map((title) => <option key={title} value={title}>{title}</option>)}
+            <select className="ws-select" value={form.role} required onChange={(e) => setField('role', e.target.value)}>
+              {ROLES.map((role) => <option key={role} value={role}>{role}</option>)}
             </select>
           )}
+        </label>
+      </div>
+
+      <div className="ws-form-grid">
+        <label className="ws-field">
+          <span className="ws-label">Job title</span>
+          <input className="ws-input" value={form.job_title} maxLength={255} required placeholder="e.g. Senior Network Engineer" onChange={(e) => setField('job_title', e.target.value)} />
         </label>
       </div>
 
@@ -236,8 +246,9 @@ function CsvImport({ onImported, success, failure }) {
         <div>
           <h3>Import your team from a CSV file</h3>
           <p>
-            Every row needs: email, first_name, last_name, job_title (Employee, Manager or HR Professional),
-            gender (Male or Female), hire_date (YYYY-MM-DD) and allowed_absence_days. Department is needed
+            Every row needs: email, first_name, last_name, role (Employee, Manager or HR Professional),
+            gender (Male or Female), hire_date (YYYY-MM-DD) and allowed_absence_days. job_title (free text, for example
+            Senior Network Engineer). Department is needed
             for employees and managers. Review the summary, then send the invitations.
           </p>
         </div>
@@ -359,7 +370,7 @@ function TeamContent() {
     const text = search.trim().toLowerCase();
     if (!text) return people || [];
     return (people || []).filter((person) =>
-      `${displayName(person)} ${person.email} ${person.job_title_label} ${person.department.name} ${person.gender}`
+      `${displayName(person)} ${person.email} ${person.role_label} ${person.job_title} ${person.department.name} ${person.gender}`
         .toLowerCase()
         .includes(text),
     );
@@ -410,7 +421,7 @@ function TeamContent() {
             <table className="ws-table">
               <thead>
                 <tr>
-                  <th>Name</th><th>Job title</th><th>Gender</th><th>Department</th><th>Hired</th><th>Absence days</th><th>Status</th><th aria-label="Actions" />
+                  <th>Name</th><th>Role</th><th>Job title</th><th>Gender</th><th>Department</th><th>Hired</th><th>Absence days</th><th>Status</th><th aria-label="Actions" />
                 </tr>
               </thead>
               <tbody>
@@ -425,7 +436,8 @@ function TeamContent() {
                         </div>
                       </div>
                     </td>
-                    <td>{person.job_title_label || '—'}</td>
+                    <td>{person.role_label || '—'}</td>
+                    <td>{person.job_title || '—'}</td>
                     <td>{person.gender || '—'}</td>
                     <td>{person.department.name || '—'}</td>
                     <td>{formatDate(person.hire_date)}</td>

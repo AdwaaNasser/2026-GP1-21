@@ -34,6 +34,17 @@ const TYPE_OPTIONS = [
   ['Manual', 'Manual'],
 ];
 
+// Has the period of a goal in the current year already ended? (A warning only.)
+function periodEnded(period) {
+  const year = CURRENT_YEAR;
+  let end;
+  if (period === 'annual') end = new Date(year, 12, 0);
+  else if (period.startsWith('Q')) end = new Date(year, Number(period.slice(1)) * 3, 0);
+  else end = new Date(year, Number(period.slice(1)), 0);
+  end.setHours(23, 59, 59, 999);
+  return end < new Date();
+}
+
 function periodLabel(period) {
   const found = PERIOD_OPTIONS.find(([value]) => value === period);
   return found ? found[1] : period;
@@ -266,7 +277,7 @@ export function EmployeePerformance() {
 const PALETTE = ['#ec6a1a', '#4a4542', '#e3a72f', '#2f9e8f', '#c2557a'];
 
 const EMPTY_GOAL = {
-  id: null, name: '', description: '', type: 'Task-based', period: 'annual', target: '', weight: '', locked: false,
+  id: null, name: '', description: '', type: 'Task-based', period: 'annual', target: '', weight: '',
 };
 
 function toRow(goal) {
@@ -278,7 +289,6 @@ function toRow(goal) {
     period: goal.period,
     target: String(goal.target),
     weight: String(goal.weight),
-    locked: goal.locked,
   };
 }
 
@@ -288,11 +298,14 @@ function GoalEditor({ employee, onChanged, onSaved, success, failure }) {
   const [saving, setSaving] = useState(false);
   const [linking, setLinking] = useState(null); // the goal whose tasks are being linked
   const [pending, setPending] = useState(null); // index of an unsaved row whose tasks are being picked
+  const [removal, setRemoval] = useState(null); // the goal just taken out of the list, deleted when saved
+  const [endedPeriod, setEndedPeriod] = useState(null); // period the manager just picked that is already over
 
   const load = useCallback(async () => {
     const result = await getJson(`/api/goals/employees/${employee.id}/goals/?year=${CURRENT_YEAR}`);
     setData(result);
     setRows(result.goals.map(toRow));
+    setRemoval(null);
   }, [employee.id]);
 
   useEffect(() => {
@@ -305,13 +318,31 @@ function GoalEditor({ employee, onChanged, onSaved, success, failure }) {
 
   function change(index, field, value) {
     setRows((current) => current.map((row, i) => (i === index ? { ...row, [field]: value } : row)));
+    if (field !== 'period') return;
+    if (periodEnded(value)) setEndedPeriod(value);
+  }
+
+  function removeRow(index) {
+    const row = rows[index];
+    const left = rows.filter((_, i) => i !== index).reduce((sum, item) => sum + (Number(item.weight) || 0), 0);
+    setRemoval({ row, index, left });
+    setRows((current) => current.filter((_, i) => i !== index));
+  }
+
+  function undoRemove() {
+    if (!removal) return;
+    const { row, index } = removal;
+    setRows((current) => {
+      const next = [...current];
+      next.splice(Math.min(index, next.length), 0, row);
+      return next;
+    });
+    setRemoval(null);
   }
 
   const total = rows.reduce((sum, row) => sum + (Number(row.weight) || 0), 0);
   const totalOk = Math.abs(total - 100) < 0.005;
   const savedById = Object.fromEntries((data ? data.goals : []).map((goal) => [goal.id, goal]));
-  const lockedTotal = rows.filter((row) => row.locked).reduce((sum, row) => sum + (Number(row.weight) || 0), 0);
-  const noRoom = lockedTotal >= 100;
   const complete = rows.length > 0 && rows.every((row) => row.name.trim() && Number(row.target) > 0 && Number(row.weight) > 0);
 
   async function save() {
@@ -340,6 +371,7 @@ function GoalEditor({ employee, onChanged, onSaved, success, failure }) {
       }
       setData(saved);
       setRows(saved.goals.map(toRow));
+      setRemoval(null);
       success('Goals saved.');
       onChanged();
       if (onSaved) onSaved();
@@ -396,13 +428,11 @@ function GoalEditor({ employee, onChanged, onSaved, success, failure }) {
           <div className="gl-goal-head">
             <strong>{row.name.trim() || `Goal ${index + 1}`}</strong>
             <span className={`gl-type${row.type === 'Manual' ? ' gl-type-manual' : ''}`}>{row.type === 'Manual' ? 'Manual' : 'Task-based'}</span>
-            {row.locked && <span className="gl-locked"><Icon name="clock" size={12} /> Period started, target and weight are locked</span>}
             <span className="ws-spacer" />
             <button
               type="button"
               className="ws-btn ws-btn-outline-danger ws-btn-sm"
-              disabled={row.locked}
-              onClick={() => setRows((current) => current.filter((_, i) => i !== index))}
+              onClick={() => removeRow(index)}
             >
               Remove
             </button>
@@ -420,17 +450,17 @@ function GoalEditor({ employee, onChanged, onSaved, success, failure }) {
             </label>
             <label className="ws-field">
               <span className="ws-label">Period</span>
-              <select className="ws-select" value={row.period} disabled={row.locked} onChange={(event) => change(index, 'period', event.target.value)}>
+              <select className="ws-select" value={row.period} onChange={(event) => change(index, 'period', event.target.value)}>
                 {PERIOD_OPTIONS.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
               </select>
             </label>
             <label className="ws-field">
               <span className="ws-label">{row.type === 'Manual' ? 'Target value' : 'Target (tasks)'}</span>
-              <input className="ws-input" type="number" min="0" step="any" value={row.target} disabled={row.locked} onChange={(event) => change(index, 'target', event.target.value)} />
+              <input className="ws-input" type="number" min="0" step="any" value={row.target} onChange={(event) => change(index, 'target', event.target.value)} />
             </label>
             <label className="ws-field">
               <span className="ws-label">Weight (%)</span>
-              <input className="ws-input" type="number" min="0" max="100" step="any" value={row.weight} disabled={row.locked} onChange={(event) => change(index, 'weight', event.target.value)} />
+              <input className="ws-input" type="number" min="0" max="100" step="any" value={row.weight} onChange={(event) => change(index, 'weight', event.target.value)} />
             </label>
           </div>
           <label className="ws-field">
@@ -482,18 +512,44 @@ function GoalEditor({ employee, onChanged, onSaved, success, failure }) {
         <button
           type="button"
           className="ws-btn ws-btn-secondary"
-          disabled={noRoom}
-          title={noRoom ? 'Locked goals already use 100% of the weight' : undefined}
           onClick={() => setRows((current) => [...current, { ...EMPTY_GOAL }])}
         >
           <Icon name="plus" size={14} /> Add goal
         </button>
-        {noRoom && <span className="ws-hint">Locked goals already use 100% of the weight, so there is no room for a new goal.</span>}
         <span className="ws-spacer" />
         <button type="button" className="ws-btn ws-btn-primary" disabled={saving || !totalOk || !complete} onClick={save}>
           {saving ? 'Saving…' : 'Save goals'}
         </button>
       </div>
+
+      {removal && (
+        <Modal title="Goal removed" onClose={() => setRemoval(null)}>
+          <p>
+            <strong>"{removal.row.name.trim() || 'Untitled goal'}"</strong> will be deleted when you save.
+          </p>
+          <p>
+            {Math.abs(removal.left - 100) < 0.005
+              ? 'The remaining weights still total 100%.'
+              : `The remaining goals total ${Number(removal.left.toFixed(2))}%. Change the weights of the other goals or add a new goal until the total is 100%.`}
+          </p>
+          <div className="ws-form-actions">
+            <button type="button" className="ws-btn ws-btn-secondary" onClick={undoRemove}>Undo</button>
+            <button type="button" className="ws-btn ws-btn-primary" autoFocus onClick={() => setRemoval(null)}>OK</button>
+          </div>
+        </Modal>
+      )}
+
+      {endedPeriod && (
+        <Modal title="This period has already ended" onClose={() => setEndedPeriod(null)}>
+          <p>
+            {periodLabel(endedPeriod)} is already over. You can still save a goal for it, but it
+            covers dates that have passed.
+          </p>
+          <div className="ws-form-actions">
+            <button type="button" className="ws-btn ws-btn-primary" autoFocus onClick={() => setEndedPeriod(null)}>OK</button>
+          </div>
+        </Modal>
+      )}
 
       {pending !== null && rows[pending] && (
         <LinkTasksModal
@@ -616,7 +672,7 @@ function LinkTasksModal({ goal, onClose, onSaved, failure, employeeId, initial, 
   );
 }
 
-function TeamHero({ team }) {
+function TeamHero({ team, year }) {
   const scored = team.filter((person) => person.overall_score !== null);
   const average = scored.length
     ? scored.reduce((sum, person) => sum + person.overall_score, 0) / scored.length
@@ -626,7 +682,7 @@ function TeamHero({ team }) {
   return (
     <section className="gl-hero gl-hero-solo">
       <div className="gl-hero-main">
-        <p className="gl-hero-kicker">Team KPI score in {CURRENT_YEAR}</p>
+        <p className="gl-hero-kicker">Team KPI score in {year}</p>
         {average === null ? (
           <div className="gl-hero-score gl-hero-score-empty"><strong>No score yet</strong></div>
         ) : (
@@ -644,37 +700,43 @@ function TeamHero({ team }) {
   );
 }
 
-function PersonProgress({ person, onManage, failure }) {
+function PersonProgress({ person, year, onManage, failure }) {
   const [data, setData] = useState(null);
   useEffect(() => {
-    getJson(`/api/goals/employees/${person.id}/goals/?year=${CURRENT_YEAR}`)
+    getJson(`/api/goals/employees/${person.id}/goals/?year=${year}`)
       .then(setData)
       .catch((error) => {
         failure(error);
         setData({ goals: [], overall_score: null, is_final: false });
       });
-  }, [person.id, failure]);
+  }, [person.id, year, failure]);
 
   if (data === null) return <TableSkeleton rows={3} />;
   return (
     <div className="gl-view">
       <Hero
         compact
-        title={`${displayName(person)} in ${CURRENT_YEAR}`}
+        title={`${displayName(person)} in ${year}`}
         score={data.overall_score}
         final={data.is_final}
         summary={goalSummary(data)}
       />
       {data.goals.length === 0 ? (
-        <EmptyState icon="flag" title="No goals yet">Set goals for {displayName(person)} to start tracking their progress.</EmptyState>
+        <EmptyState icon="flag" title="No goals yet">
+          {year === CURRENT_YEAR
+            ? `Set goals for ${displayName(person)} to start tracking their progress.`
+            : `${displayName(person)} had no goals in ${year}.`}
+        </EmptyState>
       ) : (
         <GoalCards goals={data.goals} />
       )}
-      <div className="ws-form-actions">
-        <button type="button" className="ws-btn ws-btn-primary" onClick={onManage}>
-          {data.goals.length ? 'Manage goals' : 'Set goals'}
-        </button>
-      </div>
+      {year === CURRENT_YEAR && (
+        <div className="ws-form-actions">
+          <button type="button" className="ws-btn ws-btn-primary" onClick={onManage}>
+            {data.goals.length ? 'Manage goals' : 'Set goals'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -682,17 +744,18 @@ function PersonProgress({ person, onManage, failure }) {
 function ManagerGoalsContent() {
   const { banner, success, failure, clear } = useBanner();
   const [team, setTeam] = useState(null);
+  const [year, setYear] = useState(CURRENT_YEAR);
   const [selectedId, setSelectedId] = useState(null); // editing goals
   const [viewId, setViewId] = useState(null); // looking at progress only
 
   const loadTeam = useCallback(async () => {
     try {
-      setTeam(await getJson(`/api/goals/team/?year=${CURRENT_YEAR}`));
+      setTeam(await getJson(`/api/goals/team/?year=${year}`));
     } catch (error) {
       failure(error);
       setTeam((current) => current || []);
     }
-  }, [failure]);
+  }, [year, failure]);
 
   useEffect(() => {
     loadTeam();
@@ -708,6 +771,10 @@ function ManagerGoalsContent() {
           <Banner message={banner.message} isError={banner.isError} onClose={clear} />
         </div>
       )}
+      <div className="gl-bar">
+        <span />
+        <YearSelect year={year} onChange={(value) => { setYear(value); setTeam(null); }} />
+      </div>
       {team === null ? (
         <TableSkeleton />
       ) : team.length === 0 ? (
@@ -716,7 +783,7 @@ function ManagerGoalsContent() {
         </div>
       ) : (
         <>
-          <TeamHero team={team} />
+          <TeamHero team={team} year={year} />
           <Panel title="Your team" hint="Choose a person to set or review their goals">
             <ul className="gl-team">
               {team.map((person, index) => (
@@ -733,7 +800,7 @@ function ManagerGoalsContent() {
                   <Avatar name={displayName(person)} size={40} />
                   <div className="gl-team-who">
                     <strong>{displayName(person)}</strong>
-                    <span>{person.goal_count === 0 ? 'No goals yet' : `${person.goal_count} ${person.goal_count === 1 ? 'goal' : 'goals'} in ${CURRENT_YEAR}`}</span>
+                    <span>{person.goal_count === 0 ? 'No goals yet' : `${person.goal_count} ${person.goal_count === 1 ? 'goal' : 'goals'} in ${year}`}</span>
                   </div>
                   <div className="gl-team-score">
                     <span className="gl-meter-track">
@@ -741,9 +808,11 @@ function ManagerGoalsContent() {
                     </span>
                     <strong>{person.overall_score === null ? '—' : person.overall_score.toFixed(2)}</strong>
                   </div>
-                  <button type="button" className={`ws-btn ws-btn-sm ${person.goal_count ? 'ws-btn-secondary' : 'ws-btn-primary'}`} onClick={(event) => { event.stopPropagation(); setSelectedId(person.id); }}>
-                    {person.goal_count ? 'Manage goals' : 'Set goals'}
-                  </button>
+                  {year === CURRENT_YEAR && (
+                    <button type="button" className={`ws-btn ws-btn-sm ${person.goal_count ? 'ws-btn-secondary' : 'ws-btn-primary'}`} onClick={(event) => { event.stopPropagation(); setSelectedId(person.id); }}>
+                      {person.goal_count ? 'Manage goals' : 'Set goals'}
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -753,8 +822,9 @@ function ManagerGoalsContent() {
       {viewed && !selected && (
         <Modal title={`Progress · ${displayName(viewed)}`} onClose={() => setViewId(null)}>
           <PersonProgress
-            key={viewed.id}
+            key={`${viewed.id}-${year}`}
             person={viewed}
+            year={year}
             failure={failure}
             onManage={() => { setSelectedId(viewed.id); setViewId(null); }}
           />

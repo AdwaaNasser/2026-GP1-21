@@ -64,7 +64,6 @@ def goal_data(goal, today, frozen=False):
         'rating': result['rating'],
         'no_value': result['no_value'],
         'overdue': result['overdue'],
-        'locked': goal.period_start <= today,
         'task_ids': [r.task_id for r in goal.task_records.all()],
     }
 

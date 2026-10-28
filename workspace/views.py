@@ -200,7 +200,7 @@ class ProjectMembersView(APIView):
         )
         employees = User.objects.filter(
             org_id=request.user.org_id,
-            job_title='Employee',
+            employee_record__system_role='Employee',
         ).order_by('first_name', 'last_name')
         return Response([
             {
