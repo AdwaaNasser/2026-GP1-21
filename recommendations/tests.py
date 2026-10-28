@@ -200,6 +200,13 @@ class RecommendApiTests(APITestCase):
         excluded = {e['first_name']: e['reason'] for e in self.ask(self.manager1, estimated_hours='9').data['excluded']}
         self.assertIn('Not enough time', excluded['Huda'])
 
+    def test_long_tasks_only_count_their_share_of_the_period(self):
+        # 40h spread over 10 working days (Nov 1-12) = 4h a day; Nov 1-3 holds 3 days = 12h.
+        Task.objects.create(title='long', employee=self.huda, estimated_hours=40,
+                            status='todo', start_date=START, due_date=date(2026, 11, 12))
+        huda = self.ask(self.manager1).data['recommended'][0]
+        self.assertIn('12h available', huda['reasons'][-1])  # 24h - 12h
+
     def test_meetings_count_as_busy_time(self):
         from datetime import time
         MeetingSchedule.objects.create(employee=self.huda, date=START,
@@ -251,3 +258,12 @@ class RecommendApiTests(APITestCase):
         self.assertEqual(self.ask(self.hr).status_code, 403)
         response = APIClient().post(reverse('recommend-employees'), {}, format='json')
         self.assertIn(response.status_code, (401, 403))
+
+
+    def test_manager_gets_the_skill_list(self):
+        self.client.force_authenticate(self.manager1)
+        response = self.client.get(reverse('recommend-skills'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([s['name'] for s in response.data], ['Python', 'React'])
+        self.client.force_authenticate(self.sara.user)
+        self.assertEqual(self.client.get(reverse('recommend-skills')).status_code, 403)

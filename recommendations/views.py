@@ -1,6 +1,6 @@
 from rest_framework.response import Response
 from rest_framework.views import APIView
-
+from accounts.models import Skill
 from goals.permissions import IsManager
 
 from . import services
@@ -31,3 +31,13 @@ class RecommendEmployeesView(APIView):
             'recommended': recommended,
             'excluded': excluded,
         })
+    
+
+class SkillListView(APIView):
+    """GET: every skill the manager can choose from when asking for recommendations."""
+
+    permission_classes = [IsManager]
+
+    def get(self, request):
+        skills = Skill.objects.order_by('name').values_list('skill_id', 'name')
+        return Response([{'id': skill_id, 'name': name} for skill_id, name in skills])
