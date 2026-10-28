@@ -8,6 +8,7 @@ const LINKS = {
     ['/dashboard/manager', 'Overview', 'layout'],
     ['/manager/projects', 'Projects', 'folder'],
     ['/manager/tasks', 'Tasks', 'tasks'],
+    ['/manager/team', 'My team', 'users'],
     ['/manager/goals', 'Performance', 'flag'],
   ],
   Employee: [

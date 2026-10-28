@@ -264,6 +264,8 @@ function PerformanceContent() {
   );
 }
 
+export { CURRENT_YEAR, GoalCards, Hero, Panel, YearSelect, goalSummary };
+
 export function EmployeePerformance() {
   return (
     <Shell role="Employee" title="My performance" subtitle="Track your KPIs against the goals your manager set">

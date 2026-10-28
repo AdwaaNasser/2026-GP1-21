@@ -1,12 +1,13 @@
 from decimal import ROUND_HALF_UP, Decimal
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.models import Employee, Evaluation, Goal, Task, TaskGoal
+from accounts.models import Employee, EmployeeSkill, Evaluation, Goal, Task, TaskGoal
 from workspace.permissions import is_manager
 
 from . import rules, services
@@ -303,11 +304,80 @@ class TeamPerformanceView(APIView):
                 'id': employee.pk,
                 'first_name': employee.user.first_name or '',
                 'last_name': employee.user.last_name or '',
+                'job_title': employee.user.job_title or '',
+                'department': employee.user.department or '',
                 'goal_count': len(data['goals']),
                 'overall_score': data['overall_score'],
                 'is_final': data['is_final'],
             })
         return Response(rows)
+
+
+class TeamMemberOverviewView(APIView):
+    """One person of the manager's team in one place: profile, skills,
+    workload (the tasks of the manager's projects) and KPI performance."""
+
+    permission_classes = [IsManager]
+
+    def get(self, request, employee_id):
+        employee = services.team_of(request.user).filter(pk=employee_id).first()
+        if employee is None:
+            return not_found('This employee is not in your team.')
+        year = year_from(request)
+        if year is None:
+            return bad_request({'year': 'Enter a valid year.'})
+        today = timezone.localdate()
+        user = employee.user
+
+        skills = [
+            {'name': record.skill.name, 'level': record.skill_level or ''}
+            for record in EmployeeSkill.objects.filter(employee_id=employee.pk)
+            .select_related('skill').order_by('skill__name')
+        ]
+
+        # Only the tasks the manager can see: their own projects, or no project.
+        tasks = list(
+            Task.objects.filter(employee_id=employee.pk)
+            .filter(Q(project__manager_id=request.user.pk) | Q(project__isnull=True))
+            .select_related('project')
+            .order_by('due_date', 'task_id')
+        )
+        open_tasks = [t for t in tasks if t.status != rules.DONE_STATUS]
+        overdue = [t for t in open_tasks if t.due_date is not None and t.due_date < today]
+        open_hours = sum(float(t.estimated_hours or 0) for t in open_tasks)
+
+        return Response({
+            'profile': {
+                'id': employee.pk,
+                'first_name': user.first_name or '',
+                'last_name': user.last_name or '',
+                'email': user.email,
+                'job_title': user.job_title or '',
+                'department': user.department or '',
+                'hire_date': employee.hire_date,
+                'allowed_absence_days': user.allowed_absence_days or 0,
+            },
+            'skills': skills,
+            'workload': {
+                'open_tasks': len(open_tasks),
+                'completed_tasks': len(tasks) - len(open_tasks),
+                'overdue_tasks': len(overdue),
+                'open_hours': round(open_hours, 2),
+            },
+            'tasks': [
+                {
+                    'id': t.pk,
+                    'title': t.title,
+                    'status': t.status,
+                    'due_date': t.due_date,
+                    'project': t.project.title if t.project else '',
+                    'estimated_hours': None if t.estimated_hours is None else float(t.estimated_hours),
+                    'overdue': t in overdue,
+                }
+                for t in open_tasks
+            ],
+            'performance': services.performance(employee, year, today),
+        })
 
 
 def org_summary(org_id, year, today):

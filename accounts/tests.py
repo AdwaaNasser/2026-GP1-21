@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db.models import Q
 from django.test import SimpleTestCase
 from rest_framework.test import APIRequestFactory, force_authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -214,31 +215,28 @@ class AccountApiTests(SimpleTestCase):
 
     def test_employee_visibility_is_scoped_by_role(self):
         cases = (
-            (
-                SimpleNamespace(role='HR', org_id=12, pk=1),
-                {'org_id': 12},
-            ),
+            (SimpleNamespace(role='HR', org_id=12, pk=1), (), {'org_id': 12}),
             (
                 SimpleNamespace(role='Manager', org_id=12, department='People', pk=2),
-                {'org_id': 12, 'department': 'People'},
+                (Q(employee_record__manager_id=2) | Q(pk=2),),
+                {'org_id': 12},
             ),
-            (
-                SimpleNamespace(role='Employee', org_id=12, pk=3),
-                {'user_id': 3},
-            ),
+            (SimpleNamespace(role='Employee', org_id=12, pk=3), (), {'user_id': 3}),
         )
 
-        for user, expected_filter in cases:
+        for user, expected_args, expected_kwargs in cases:
             with self.subTest(role=user.role):
                 with patch('accounts.views.User.objects.filter') as filter_users:
                     result = _employees_visible_to(user)
                 filter_users.return_value.select_related.assert_called_once_with(
                     'employee_record',
+                    'employee_record__manager__user',
                     'manager_record',
                     'org',
                 )
                 filter_users.return_value.select_related.return_value.filter.assert_called_once_with(
-                    **expected_filter,
+                    *expected_args,
+                    **expected_kwargs,
                 )
                 self.assertIs(
                     result,
@@ -556,13 +554,16 @@ class AccountApiTests(SimpleTestCase):
                 'last_name': 'One',
                 'role': 'Employee',
                 'job_title': 'Software Engineer',
+                'manager_id': 7,
                 'hire_date': '2024-01-15',
             },
             format='json',
         )
         force_authenticate(request, user=self.hr_user())
         user = SimpleNamespace(email='person@example.com')
+        boss = SimpleNamespace(pk=7)
         with (
+            patch('accounts.views._find_manager', return_value=boss),
             patch('accounts.views.User.objects.filter') as filter_users,
             patch(
                 'accounts.views._create_account',
@@ -585,6 +586,26 @@ class AccountApiTests(SimpleTestCase):
             create_account.call_args.kwargs['job_title'],
             'Software Engineer',
         )
+        self.assertIs(create_account.call_args.kwargs['manager'], boss)
+
+    def test_team_invite_requires_a_manager_for_employees(self):
+        request = self.factory.post(
+            '/api/accounts/team-invite/',
+            {
+                'email': 'person@example.com',
+                'first_name': 'Person',
+                'last_name': 'One',
+                'role': 'Employee',
+                'job_title': 'Software Engineer',
+                'hire_date': '2024-01-15',
+            },
+            format='json',
+        )
+        force_authenticate(request, user=self.hr_user())
+        with patch('accounts.views._find_manager', return_value=None):
+            response = TeamInviteView.as_view()(request)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('manager_id', response.data)
 
     def test_team_invite_accepts_hr_professional_role(self):
         request = self.factory.post(
@@ -624,12 +645,16 @@ class AccountApiTests(SimpleTestCase):
                 'first_name': 'Person',
                 'last_name': 'One',
                 'role': 'Employee',
+                'manager_id': 7,
                 'hire_date': '2024-01-15',
             },
             format='json',
         )
         force_authenticate(request, user=self.hr_user())
-        with patch('accounts.views.User.objects.filter') as filter_users:
+        with (
+            patch('accounts.views._find_manager', return_value=SimpleNamespace(pk=7)),
+            patch('accounts.views.User.objects.filter') as filter_users,
+        ):
             filter_users.return_value.exists.return_value = False
             response = TeamInviteView.as_view()(request)
         self.assertEqual(response.status_code, 400)
@@ -680,6 +705,7 @@ class AccountApiTests(SimpleTestCase):
             user=user,
             system_role='Manager',
             hire_date='2024-01-15',
+            manager=None,
         )
         create_manager.assert_called_once_with(user=user)
 
@@ -712,6 +738,47 @@ class AccountApiTests(SimpleTestCase):
         employee_record.save.assert_called_once_with(update_fields=['hire_date'])
         self.assertEqual(user.job_title, 'Senior Network Engineer')
         user.save.assert_called_once()
+
+    def test_hr_can_change_the_manager_of_an_employee(self):
+        request = self.factory.patch(
+            '/api/accounts/employees/33/',
+            {'manager_id': 7},
+            format='json',
+        )
+        force_authenticate(request, user=self.hr_user())
+        boss = SimpleNamespace(pk=7, user=SimpleNamespace(display_name='Mona Manager'))
+        employee_record = SimpleNamespace(hire_date=None, manager=None, save=MagicMock())
+        user = SimpleNamespace(
+            pk=33, email='person@example.com', first_name='Person', last_name='One',
+            role='Employee', job_title='Analyst', employee_record=employee_record,
+            allowed_absence_days=0, department=None, save=MagicMock(),
+            get_role_display=lambda: 'Employee',
+        )
+        with (
+            patch.object(EmployeeDetailView, 'get_object', return_value=user),
+            patch('accounts.views._find_manager', return_value=boss),
+        ):
+            response = EmployeeDetailView.as_view()(request, employee_id=33)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIs(employee_record.manager, boss)
+        employee_record.save.assert_called_once_with(update_fields=['manager'])
+        self.assertEqual(response.data['manager'], {'id': 7, 'name': 'Mona Manager'})
+
+    def test_a_manager_cannot_change_who_an_employee_reports_to(self):
+        request = self.factory.patch(
+            '/api/accounts/employees/33/',
+            {'manager_id': 7},
+            format='json',
+        )
+        force_authenticate(
+            request,
+            user=SimpleNamespace(is_authenticated=True, role='Manager', org_id=12, pk=2),
+        )
+        user = SimpleNamespace(pk=33, role='Employee')
+        with patch.object(EmployeeDetailView, 'get_object', return_value=user):
+            response = EmployeeDetailView.as_view()(request, employee_id=33)
+        self.assertEqual(response.status_code, 403)
 
     def test_invite_all_uses_ids_without_a_batch_table(self):
         request = self.factory.post(

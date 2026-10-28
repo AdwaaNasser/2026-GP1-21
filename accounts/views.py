@@ -87,6 +87,7 @@ def _create_account(
     gender=None,
     allowed_absence_days=None,
     job_title=None,
+    manager=None,
 ):
     user = User.objects.create_user(
         email=email,
@@ -103,6 +104,7 @@ def _create_account(
         user=user,
         system_role=role,
         hire_date=hire_date,
+        manager=manager,
     )
     if role == 'Manager':
         Manager.objects.create(user=user)
@@ -112,13 +114,19 @@ def _create_account(
 def _employees_visible_to(user):
     employees = User.objects.filter(
         Q(employee_record__isnull=False) | Q(manager_record__isnull=False),
-    ).select_related('employee_record', 'manager_record', 'org')
+    ).select_related(
+        'employee_record',
+        'employee_record__manager__user',
+        'manager_record',
+        'org',
+    )
     if user.role == 'HR':
         return employees.filter(org_id=user.org_id)
     if user.role == 'Manager':
+        # A manager sees the employees who report to them, and themselves.
         return employees.filter(
+            Q(employee_record__manager_id=user.pk) | Q(pk=user.pk),
             org_id=user.org_id,
-            department=user.department,
         )
     return employees.filter(user_id=user.pk)
 
@@ -126,6 +134,23 @@ def _employees_visible_to(user):
 def _hire_date_of(user):
     employee = getattr(user, 'employee_record', None)
     return employee.hire_date if employee is not None else None
+
+
+def _manager_of(user):
+    employee = getattr(user, 'employee_record', None)
+    boss = getattr(employee, 'manager', None) if employee is not None else None
+    if boss is None:
+        return None
+    return {'id': boss.pk, 'name': boss.user.display_name}
+
+
+def _find_manager(manager_id, organization_id):
+    """The manager with this id in this organization, or None."""
+    try:
+        manager_id = int(manager_id)
+    except (TypeError, ValueError):
+        return None
+    return Manager.objects.filter(pk=manager_id, user__org_id=organization_id).first()
 
 
 def _employee_data(user):
@@ -138,6 +163,7 @@ def _employee_data(user):
         'role_label': user.get_role_display(),
         'job_title': user.job_title or '',
         'hire_date': _hire_date_of(user),
+        'manager': _manager_of(user),
         'allowed_absence_days': user.allowed_absence_days or 0,
         'department': {
             'id': user.department or '',
@@ -397,6 +423,7 @@ class CSVEmployeeImportView(APIView):
             'last_name',
             'role',
             'job_title',
+            'manager_email',
             'department',
             'gender',
             'hire_date',
@@ -498,6 +525,7 @@ class CSVEmployeeImportView(APIView):
                     'last_name': last_name,
                     'role': role,
                     'job_title': row.get('job_title') or None,
+                    'manager_email': row.get('manager_email') or None,
                     'department': row.get('department') or None,
                     'gender': row.get('gender') or None,
                     'hire_date': date,
@@ -508,6 +536,18 @@ class CSVEmployeeImportView(APIView):
                 errors.append({'row': row_number, 'detail': error.detail})
 
         for row in rows:
+            manager = None
+            if row['manager_email'] and row['role'] == 'Employee':
+                manager = Manager.objects.filter(
+                    user__email__iexact=row['manager_email'],
+                    user__org_id=request.user.org_id,
+                ).first()
+                if manager is None:
+                    errors.append({
+                        'row': row['row'],
+                        'detail': 'No manager with this email exists. Import the manager first.',
+                    })
+                    continue
             try:
                 with transaction.atomic():
                     user, _ = _create_account(
@@ -517,6 +557,7 @@ class CSVEmployeeImportView(APIView):
                         password=None,
                         role=row['role'],
                         job_title=row['job_title'],
+                        manager=manager,
                         organization=request.user.org,
                         department=row['department'],
                         gender=row['gender'],
@@ -679,6 +720,14 @@ class TeamInviteView(APIView):
                 {'department': 'Department must be 255 characters or fewer.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        manager = None
+        if role == 'Employee':
+            manager = _find_manager(request.data.get('manager_id'), request.user.org_id)
+            if manager is None:
+                return Response(
+                    {'manager_id': 'Choose the manager this employee reports to.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         job_title = str(request.data.get('job_title', '')).strip()
         if not job_title:
             return Response(
@@ -703,6 +752,7 @@ class TeamInviteView(APIView):
                     hire_date=hire_date,
                     department=department,
                     job_title=job_title,
+                    manager=manager,
                 )
                 _send_invitation_email(user)
         except (smtplib.SMTPException, OSError):
@@ -805,6 +855,7 @@ class EmployeeDetailView(APIView):
             ),
             'hire_date': serializers.DateField(required=False),
             'job_title': serializers.CharField(max_length=255, required=False),
+            'manager_id': serializers.IntegerField(required=False, allow_null=True),
         }
         invalid_fields = set(request.data) - set(fields)
         if invalid_fields:
@@ -818,6 +869,26 @@ class EmployeeDetailView(APIView):
         serializer.is_valid(raise_exception=True)
         data = dict(serializer.validated_data)
         hire_date = data.pop('hire_date', None)
+        change_manager = 'manager_id' in data
+        manager_id = data.pop('manager_id', None)
+        new_manager = None
+        if change_manager:
+            if request.user.role != 'HR':
+                return Response(
+                    {'manager_id': 'Only HR can change who an employee reports to.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            if user.role != 'Employee':
+                return Response(
+                    {'manager_id': 'Only employees report to a manager.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            new_manager = _find_manager(manager_id, request.user.org_id)
+            if new_manager is None:
+                return Response(
+                    {'manager_id': 'Choose the manager this employee reports to.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         if 'job_title' in data and not data['job_title'].strip():
             return Response(
                 {'job_title': 'Enter a job title.'},
@@ -826,10 +897,16 @@ class EmployeeDetailView(APIView):
         for field, value in data.items():
             setattr(user, field, value)
         user.save()
+        employee_fields = []
+        employee = user.employee_record
         if hire_date is not None:
-            employee = user.employee_record
             employee.hire_date = hire_date
-            employee.save(update_fields=['hire_date'])
+            employee_fields.append('hire_date')
+        if change_manager:
+            employee.manager = new_manager
+            employee_fields.append('manager')
+        if employee_fields:
+            employee.save(update_fields=employee_fields)
         return Response(_employee_data(user))
 
 

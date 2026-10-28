@@ -7,7 +7,8 @@ from django.test import SimpleTestCase, override_settings
 from rest_framework.test import APIRequestFactory, APITestCase, force_authenticate
 
 from accounts.models import (
-    Employee, Evaluation, Goal, Manager, Organization, Project, Task, TaskGoal, User,
+    Employee, EmployeeSkill, Evaluation, Goal, Manager, Organization, Project, Skill, Task,
+    TaskGoal, User,
 )
 
 from . import rules
@@ -216,6 +217,45 @@ class GoalsApiTests(APITestCase):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(TaskGoal.objects.filter(goal_id=goal.pk).count(), 1)
         self.assertEqual(response.data['goals'][0]['progress'], 100.0)
+
+    def test_manager_sees_a_team_member_in_one_place(self):
+        sara = Employee.objects.get(pk=self.sara.pk)
+        python = Skill.objects.create(name='Python')
+        EmployeeSkill.objects.create(employee=sara, skill=python, skill_level='advanced')
+        self.save_goals([goal_input('Quality', 'annual', '100', kind='Task-based', target='2')])
+        theirs = Project.objects.create(title='Other', manager=Manager.objects.get(pk=self.boss2.pk))
+
+        def task(title, project, status, due, hours):
+            return Task.objects.create(
+                title=title, project=project, employee=sara, status=status,
+                due_date=due, estimated_hours=hours,
+            )
+
+        task('Late', self.project, 'in_progress', date(2026, 3, 1), 4)
+        task('Soon', self.project, 'todo', date(2026, 4, 1), 6)
+        task('Finished', self.project, 'completed', date(2026, 2, 1), 3)
+        task('Not mine', theirs, 'todo', date(2026, 4, 2), 8)
+
+        self.client.force_authenticate(self.boss)
+        response = self.client.get(f'/team/{self.sara.pk}/overview/?year=2026')
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['profile']['email'], 'sara@acme.test')
+        self.assertEqual(response.data['skills'], [{'name': 'Python', 'level': 'advanced'}])
+        self.assertEqual(
+            response.data['workload'],
+            {'open_tasks': 2, 'completed_tasks': 1, 'overdue_tasks': 1, 'open_hours': 10.0},
+        )
+        self.assertEqual([t['title'] for t in response.data['tasks']], ['Late', 'Soon'])
+        self.assertTrue(response.data['tasks'][0]['overdue'])
+        self.assertEqual(len(response.data['performance']['goals']), 1)
+
+    def test_team_member_overview_is_only_for_the_managers_own_team(self):
+        self.client.force_authenticate(self.boss)
+        self.assertEqual(self.client.get(f'/team/{self.other.pk}/overview/').status_code, 404)
+        for user in (self.sara, self.hr):
+            self.client.force_authenticate(user)
+            self.assertEqual(self.client.get(f'/team/{self.sara.pk}/overview/').status_code, 403)
 
     def test_measurement_type_cannot_change(self):
         self.save_goals([goal_input('G', 'Q4', '100')])

@@ -20,10 +20,10 @@ const ROLES = ['HR Professional', 'Employee', 'Manager'];
 const GENDERS = ['Male', 'Female'];
 
 const CSV_TEMPLATE = [
-  'email,first_name,last_name,role,job_title,gender,department,hire_date,allowed_absence_days',
-  'sara@example.com,Sara,Alharbi,Employee,Software Engineer,Female,Engineering,2024-01-15,21',
-  'omar@example.com,Omar,Khalid,Manager,Operations Manager,Male,Operations,2022-03-01,21',
-  'lina@example.com,Lina,Faisal,HR Professional,HR Specialist,Female,People,2021-06-10,21',
+  'email,first_name,last_name,role,job_title,gender,department,hire_date,allowed_absence_days,manager_email',
+  'sara@example.com,Sara,Alharbi,Employee,Software Engineer,Female,Engineering,2024-01-15,21,omar@example.com',
+  'omar@example.com,Omar,Khalid,Manager,Operations Manager,Male,Operations,2022-03-01,21,',
+  'lina@example.com,Lina,Faisal,HR Professional,HR Specialist,Female,People,2021-06-10,21,',
 ].join('\n');
 
 function downloadTemplate() {
@@ -37,7 +37,7 @@ function downloadTemplate() {
 
 // ---------- Add or edit one person ----------
 
-function PersonForm({ person, departments, onSubmit, onCancel }) {
+function PersonForm({ person, departments, managers, onSubmit, onCancel }) {
   const isEdit = Boolean(person);
   const [form, setForm] = useState(
     isEdit
@@ -51,6 +51,7 @@ function PersonForm({ person, departments, onSubmit, onCancel }) {
           hire_date: person.hire_date || '',
           allowed_absence_days: String(person.allowed_absence_days ?? ''),
           department: person.department.name || '',
+          manager_id: person.manager ? String(person.manager.id) : '',
         }
       : {
           first_name: '',
@@ -62,6 +63,7 @@ function PersonForm({ person, departments, onSubmit, onCancel }) {
           hire_date: '',
           allowed_absence_days: '',
           department: '',
+          manager_id: '',
         },
   );
   const [error, setError] = useState('');
@@ -84,6 +86,7 @@ function PersonForm({ person, departments, onSubmit, onCancel }) {
         allowed_absence_days: Number(form.allowed_absence_days),
         department: form.department.trim(),
       };
+      if (form.role === 'Employee') shared.manager_id = Number(form.manager_id);
       await onSubmit(
         isEdit ? shared : { ...shared, email: form.email.trim(), role: form.role },
       );
@@ -163,6 +166,18 @@ function PersonForm({ person, departments, onSubmit, onCancel }) {
           </datalist>
         </label>
       </div>
+
+      {form.role === 'Employee' && (
+        <div className="ws-form-grid">
+          <label className="ws-field">
+            <span className="ws-label">Direct manager</span>
+            <select className="ws-select" value={form.manager_id} required onChange={(e) => setField('manager_id', e.target.value)}>
+              <option value="">Choose a manager</option>
+              {managers.map((manager) => <option key={manager.id} value={manager.id}>{displayName(manager)}</option>)}
+            </select>
+          </label>
+        </div>
+      )}
 
       {!isEdit && (
         <p className="ws-hint">An invitation email is sent so the new person can set their own password.</p>
@@ -249,7 +264,7 @@ function CsvImport({ onImported, success, failure }) {
             Every row needs: email, first_name, last_name, role (Employee, Manager or HR Professional),
             gender (Male or Female), hire_date (YYYY-MM-DD) and allowed_absence_days. job_title (free text, for example
             Senior Network Engineer). Department is needed
-            for employees and managers. Review the summary, then send the invitations.
+            for employees and managers. Employees should have manager_email, the email of their direct manager (list the manager on an earlier row, or use a manager who already exists). Review the summary, then send the invitations.
           </p>
         </div>
         <button type="button" className="ws-btn ws-btn-secondary ws-btn-sm" onClick={downloadTemplate}>
@@ -366,6 +381,8 @@ function TeamContent() {
     }
   }
 
+  const managers = useMemo(() => (people || []).filter((person) => person.role_label === 'Manager'), [people]);
+
   const shown = useMemo(() => {
     const text = search.trim().toLowerCase();
     if (!text) return people || [];
@@ -421,7 +438,7 @@ function TeamContent() {
             <table className="ws-table">
               <thead>
                 <tr>
-                  <th>Name</th><th>Role</th><th>Job title</th><th>Gender</th><th>Department</th><th>Hired</th><th>Absence days</th><th>Status</th><th aria-label="Actions" />
+                  <th>Name</th><th>Role</th><th>Job title</th><th>Direct manager</th><th>Gender</th><th>Department</th><th>Hired</th><th>Absence days</th><th>Status</th><th aria-label="Actions" />
                 </tr>
               </thead>
               <tbody>
@@ -438,6 +455,7 @@ function TeamContent() {
                     </td>
                     <td>{person.role_label || '—'}</td>
                     <td>{person.job_title || '—'}</td>
+                    <td>{person.role_label === 'Employee' ? (person.manager ? person.manager.name : <span className="ws-pill ws-pill-warn">Not assigned</span>) : '—'}</td>
                     <td>{person.gender || '—'}</td>
                     <td>{person.department.name || '—'}</td>
                     <td>{formatDate(person.hire_date)}</td>
@@ -470,12 +488,12 @@ function TeamContent() {
 
       {adding && (
         <Modal title="Add person" onClose={() => setAdding(false)}>
-          <PersonForm departments={departments} onSubmit={addPerson} onCancel={() => setAdding(false)} />
+          <PersonForm departments={departments} managers={managers} onSubmit={addPerson} onCancel={() => setAdding(false)} />
         </Modal>
       )}
       {editing && (
         <Modal title={`Edit ${displayName(editing)}`} onClose={() => setEditing(null)}>
-          <PersonForm person={editing} departments={departments} onSubmit={updatePerson} onCancel={() => setEditing(null)} />
+          <PersonForm person={editing} departments={departments} managers={managers} onSubmit={updatePerson} onCancel={() => setEditing(null)} />
         </Modal>
       )}
     </>

@@ -274,7 +274,7 @@ export default function Dashboard({ role }) {
 
           {role === 'Manager' && (
             <section className="dashboard-panel" id="team">
-              <h2>Your department team</h2>
+              <h2>Your team</h2>
               <p className="description">People information available to your Manager role.</p>
               <EmployeeTable employees={employees} />
             </section>
@@ -466,7 +466,7 @@ function OverviewContent({ role }) {
           )}
         </section>
         <section className="ws-card ws-side-card">
-          <div className="ws-card-head"><h3>Your department team</h3></div>
+          <div className="ws-card-head"><h3>Your team</h3></div>
           <PeopleTable people={people} />
         </section>
       </>
