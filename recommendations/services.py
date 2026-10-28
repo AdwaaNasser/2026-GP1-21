@@ -22,13 +22,25 @@ APPROVED_LEAVE = 'approved'
 HISTORY_TASKS = 20
 
 
-def company_skills(org_id):
-    """Skills used in this organization. The skills table is shared by every
-    company, so only skills that this company's employees or tasks use are shown."""
-    return Skill.objects.filter(
-        Q(employee_records__employee__user__org_id=org_id)
-        | Q(task_records__task__employee__user__org_id=org_id)
-    ).distinct()
+def team_of(manager_user):
+    """The manager's team = the same people the task form lists under Assignee:
+    employees in the manager's organization and department. Everything comes
+    from the database, so people added through the website appear here too."""
+    return [
+        employee
+        for employee in Employee.objects.filter(
+            user__org_id=manager_user.org_id,
+            user__department=manager_user.department,
+        ).select_related('user')
+        if employee.user.role == 'Employee'
+    ]
+
+
+def team_skills(manager_user):
+    """Skills that someone in the manager's team has. The skills table is shared
+    by every company, so the manager only sees and uses the skills of their team."""
+    ids = [employee.pk for employee in team_of(manager_user)]
+    return Skill.objects.filter(employee_records__employee_id__in=ids).distinct()
 
 
 def work_histories(employee_ids):
@@ -222,17 +234,7 @@ def recommend(
         (recommended, excluded)
     """
 
-    # The manager's team = the same people the task form lists under Assignee:
-    # employees in the manager's organization and department. Everything comes
-    # from the database, so people added through the website appear here too.
-    team = [
-        employee
-        for employee in Employee.objects.filter(
-            user__org_id=manager_user.org_id,
-            user__department=manager_user.department,
-        ).select_related('user')
-        if employee.user.role == 'Employee'
-    ]
+    team = team_of(manager_user)
     ids = [employee.pk for employee in team]
 
     # 1. Employee skills

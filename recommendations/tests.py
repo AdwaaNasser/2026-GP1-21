@@ -312,6 +312,18 @@ class RecommendApiTests(APITestCase):
         self.assertNotIn('Cobol', names)
         self.assertEqual(self.ask(self.manager1, skills=[{'skill_id': cobol.pk}]).status_code, 400)
 
+    def test_skills_of_another_department_are_hidden_and_refused(self):
+        # Same company, other team: manager1 must not see or use their skills.
+        sql = Skill.objects.create(name='SQL')
+        EmployeeSkill.objects.create(employee=self.other, skill=sql, skill_level='expert')
+        self.client.force_authenticate(self.manager1)
+        names = [s['name'] for s in self.client.get(reverse('recommend-skills')).data]
+        self.assertNotIn('SQL', names)
+        self.assertEqual(self.ask(self.manager1, skills=[{'skill_id': sql.pk}]).status_code, 400)
+        self.client.force_authenticate(self.manager2)
+        names = [s['name'] for s in self.client.get(reverse('recommend-skills')).data]
+        self.assertIn('SQL', names)
+
     def test_manager_gets_the_skill_list(self):
         self.client.force_authenticate(self.manager1)
         response = self.client.get(reverse('recommend-skills'))

@@ -16,7 +16,7 @@ class RecommendEmployeesView(APIView):
 
     def post(self, request):
         serializer = RecommendRequestSerializer(
-            data=request.data, context={'org_id': request.user.org_id},
+            data=request.data, context={'manager': request.user},
         )
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
@@ -36,10 +36,10 @@ class RecommendEmployeesView(APIView):
 
 
 class SkillListView(APIView):
-    """GET: the skills of the manager's own company, to choose from when asking for recommendations."""
+    """GET: the skills someone in the manager's team has, to choose from when asking for recommendations."""
 
     permission_classes = [IsManager]
 
     def get(self, request):
-        skills = services.company_skills(request.user.org_id).order_by('name').values_list('skill_id', 'name')
+        skills = services.team_skills(request.user).order_by('name').values_list('skill_id', 'name')
         return Response([{'id': skill_id, 'name': name} for skill_id, name in skills])
