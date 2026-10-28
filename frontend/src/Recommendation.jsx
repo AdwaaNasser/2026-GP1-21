@@ -16,7 +16,7 @@ async function call(path, options) {
   return responseData(await apiRequest(path, options));
 }
 
-export default function Recommendation({ form, onPick }) {
+export default function Recommendation({ form, onPick, onSkillsChange }) {
   const [open, setOpen] = useState(false);
   const [allSkills, setAllSkills] = useState([]);
   const [wanted, setWanted] = useState([]); // [{ skill_id, level, required }]
@@ -36,6 +36,13 @@ export default function Recommendation({ form, onPick }) {
   // The person picked from the list is whoever the Assignee field holds now.
   const isChosen = (person) => String(person.employee_id) === String(form.assignee);
   const chosen = result ? result.recommended.find(isChosen) : null;
+
+  // Tell the task form which skills the task needs, so they are saved with it.
+  useEffect(() => {
+    if (onSkillsChange) {
+      onSkillsChange(wanted.map((w) => ({ skill: Number(w.skill_id), level: w.level })));
+    }
+  }, [wanted, onSkillsChange]);
 
   // Old results no longer match once the task details change, so hide them.
   useEffect(() => {

@@ -342,3 +342,33 @@ class RecommendApiTests(APITestCase):
         self.assertEqual([s['name'] for s in response.data], ['Python', 'React'])
         self.client.force_authenticate(self.sara.user)
         self.assertEqual(self.client.get(reverse('recommend-skills')).status_code, 403)
+
+
+class SkillsSavedWithTaskTests(APITestCase):
+    """A task created with skills counts as experience once it is completed."""
+
+    def test_completed_task_with_saved_skill_counts_as_experience(self):
+        org = Organization.objects.create(name='Acme')
+        boss = make_user(org, 'boss@acme.test', 'Manager')
+        Manager.objects.create(user=boss)
+        lina = Employee.objects.create(user=make_user(org, 'lina@acme.test', 'Employee'),
+                                       system_role='Employee', hire_date=date(2024, 1, 1))
+        sql = Skill.objects.create(name='SQL')
+        EmployeeSkill.objects.create(employee=lina, skill=sql, skill_level='advanced')
+        self.client.force_authenticate(boss)
+
+        created = self.client.post('/api/workspace/tasks/', {
+            'title': 'Sales report', 'assignee': lina.pk,
+            'start_date': '2026-09-01', 'due_date': '2026-09-03',
+            'skills': [{'skill': sql.pk, 'level': 'intermediate'}],
+        }, format='json')
+        self.assertEqual(created.status_code, 201, created.data)
+        task = Task.objects.get(title='Sales report')
+        self.assertEqual(list(task.skill_records.values_list('skill__name', 'skill_level')),
+                         [('SQL', 'intermediate')])
+
+        Task.objects.filter(pk=task.pk).update(status='completed')
+        response = self.client.post('/api/recommendations/', {
+            'skills': [{'skill_id': sql.pk}], 'start_date': str(START), 'due_date': str(END),
+        }, format='json')
+        self.assertIn('1 finished task(s) using these skills', response.data['recommended'][0]['reasons'])

@@ -499,6 +499,7 @@ export function TaskForm({ task, projects, employees, lockedProjectId, onSubmit,
   );
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [skills, setSkills] = useState([]); // skills chosen in the recommendation panel
 
   function setField(name, value) {
     setForm((current) => ({ ...current, [name]: value }));
@@ -533,6 +534,7 @@ export function TaskForm({ task, projects, employees, lockedProjectId, onSubmit,
         due_date: form.due_date,
         priority: form.priority,
         privacy: form.privacy,
+        ...(task ? {} : { skills }),
       });
     } catch (failure) {
       setError(failure.message || 'The task could not be saved.');
@@ -580,7 +582,13 @@ export function TaskForm({ task, projects, employees, lockedProjectId, onSubmit,
         </label>
       </div>
 
-      {!task && <Recommendation form={form} onPick={(id) => setField('assignee', id)} />}
+      {!task && (
+        <Recommendation
+          form={form}
+          onPick={(id) => setField('assignee', id)}
+          onSkillsChange={setSkills}
+        />
+      )}
 
       <label className="ws-field">
         <span className="ws-label">Task privacy</span>
