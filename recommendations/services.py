@@ -1,4 +1,3 @@
-
 """Gets the data from the database and hands it to the rules."""
 
 from datetime import datetime, timedelta
@@ -6,6 +5,7 @@ from datetime import datetime, timedelta
 from django.db.models import Count, Q
 
 from accounts.models import (
+    Employee,
     EmployeeSkill,
     LeaveRequest,
     MeetingSchedule,
@@ -13,13 +13,14 @@ from accounts.models import (
     Task,
     TaskSkill,
 )
-from goals.services import team_of
 
 from . import rules, semantic
+
 
 DONE_STATUS = 'completed'
 APPROVED_LEAVE = 'approved'
 HISTORY_TASKS = 20
+
 
 def work_histories(employee_ids):
     """Get recent completed-task descriptions for each employee."""
@@ -47,6 +48,7 @@ def work_histories(employee_ids):
         for emp_id, parts in texts.items()
     }
 
+
 def overlaps(start_field, end_field, start, end):
     """Find records whose dates overlap the requested period."""
     starts_before_end = (
@@ -60,6 +62,7 @@ def overlaps(start_field, end_field, start, end):
     )
 
     return starts_before_end & ends_after_start
+
 
 def task_hours_in_period(
     task_start,
@@ -107,6 +110,7 @@ def task_hours_in_period(
 
     return hours * overlap_days / total_days
 
+
 def leave_days(employee_ids, start, end):
     """Get approved leave dates for each employee."""
     days = {}
@@ -133,6 +137,7 @@ def leave_days(employee_ids, start, end):
             day += timedelta(days=1)
 
     return days
+
 
 def meeting_hours(employee_ids, start, end, days_off=None):
     """Calculate meeting hours, excluding approved leave days."""
@@ -181,6 +186,7 @@ def meeting_hours(employee_ids, start, end, days_off=None):
 
     return hours
 
+
 def recommend(
     manager_user,
     skills,
@@ -207,7 +213,17 @@ def recommend(
         (recommended, excluded)
     """
 
-    team = list(team_of(manager_user))
+    # The manager's team = the same people the task form lists under Assignee:
+    # employees in the manager's organization and department. Everything comes
+    # from the database, so people added through the website appear here too.
+    team = [
+        employee
+        for employee in Employee.objects.filter(
+            user__org_id=manager_user.org_id,
+            user__department=manager_user.department,
+        ).select_related('user')
+        if employee.user.role == 'Employee'
+    ]
     ids = [employee.pk for employee in team]
 
     # 1. Employee skills
@@ -425,11 +441,9 @@ def recommend(
             most_past,
             emp_busy,
             capacity,
-            meaning=(
-                meaning.get(emp.pk, 0.0)
-                if meaning
-                else None
-            ),
+            # No past work means "unknown", not "unrelated":
+            # the factor is left out for this employee instead of counting as 0.
+            meaning=meaning.get(emp.pk),
         )
 
         recommended.append({

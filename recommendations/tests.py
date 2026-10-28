@@ -76,28 +76,30 @@ class SemanticTests(SimpleTestCase):
             self.assertEqual(semantic.similarities('Sales report', {1: 'Built a report'}), {})
 
 
-def make_user(org, email, role):
+def make_user(org, email, role, department='IT'):
     return User.objects.create_user(
         email=email, password='Pass12345', org=org, hire_date=date(2024, 1, 1),
         first_name=email.split('@')[0].title(), last_name='Test', job_title=role,
+        department=department,
     )
 
 
 @override_settings(ROOT_URLCONF='recommendations.urls')
 class RecommendApiTests(APITestCase):
-    """manager1's team: sara, huda, noura, maha, reem. manager2's team: other."""
+    """manager1's team (IT department): sara, huda, noura, maha, reem.
+    manager2's team (Sales department): other."""
 
     @classmethod
     def setUpTestData(cls):
         org = Organization.objects.create(name='Acme')
         cls.manager1 = make_user(org, 'manager1@acme.test', 'Manager')
-        cls.manager2 = make_user(org, 'manager2@acme.test', 'Manager')
+        cls.manager2 = make_user(org, 'manager2@acme.test', 'Manager', 'Sales')
         cls.hr = make_user(org, 'hr@acme.test', 'HR')
         boss1 = Manager.objects.create(user=cls.manager1)
         boss2 = Manager.objects.create(user=cls.manager2)
 
-        def employee(name, boss):
-            user = make_user(org, f'{name}@acme.test', 'Employee')
+        def employee(name, boss, department='IT'):
+            user = make_user(org, f'{name}@acme.test', 'Employee', department)
             return Employee.objects.create(user=user, system_role='Employee', manager=boss)
 
         cls.sara = employee('sara', boss1)
@@ -105,7 +107,7 @@ class RecommendApiTests(APITestCase):
         cls.noura = employee('noura', boss1)
         cls.maha = employee('maha', boss1)
         cls.reem = employee('reem', boss1)
-        cls.other = employee('other', boss2)
+        cls.other = employee('other', boss2, 'Sales')
 
         cls.python = Skill.objects.create(name='Python')
         cls.react = Skill.objects.create(name='React')
@@ -185,6 +187,34 @@ class RecommendApiTests(APITestCase):
         self.assertLess(after['Huda']['score'], before['Huda'])
         self.assertIn('100% similar', after['Sara']['reasons'][-1])
 
+    def test_new_employee_without_past_work_is_not_counted_as_unrelated(self):
+        # Cold start: Huda has no past work to compare, so she gets no meaning factor.
+        before = {r['first_name']: r['score'] for r in self.ask(self.manager1).data['recommended']}
+        with patch('recommendations.services.semantic.similarities', return_value={self.sara.pk: 1.0}):
+            data = self.ask(self.manager1, title='Sales dashboard').data
+        huda = {r['first_name']: r for r in data['recommended']}['Huda']
+        self.assertEqual(huda['score'], before['Huda'])
+        self.assertFalse(any('similar' in reason for reason in huda['reasons']))
+
+    def test_only_people_the_manager_can_assign_are_recommended(self):
+        # Maha moves to another department, so she leaves the Assignee list
+        # of manager1's task form: she must not be recommended either.
+        self.maha.user.department = 'Sales'
+        self.maha.user.save()
+        data = self.ask(self.manager1).data
+        names = [r['first_name'] for r in data['recommended'] + data['excluded']]
+        self.assertNotIn('Maha', names)
+        self.assertIn('Huda', names)
+
+    def test_employee_added_through_the_website_is_recommended(self):
+        # HR invites employees with a department but no manager link: they are
+        # still in the manager's Assignee list, so they must be recommended too.
+        user = make_user(self.maha.user.org, 'lina@acme.test', 'Employee')
+        lina = Employee.objects.create(user=user, system_role='Employee')
+        EmployeeSkill.objects.create(employee=lina, skill=self.python, skill_level='advanced')
+        names = [r['first_name'] for r in self.ask(self.manager1).data['recommended']]
+        self.assertIn('Lina', names)
+
     def test_without_the_model_ranking_still_works(self):
         with patch.object(semantic, 'get_model', side_effect=ImportError):
             data = self.ask(self.manager1, title='Sales dashboard').data
@@ -258,7 +288,6 @@ class RecommendApiTests(APITestCase):
         self.assertEqual(self.ask(self.hr).status_code, 403)
         response = APIClient().post(reverse('recommend-employees'), {}, format='json')
         self.assertIn(response.status_code, (401, 403))
-
 
     def test_manager_gets_the_skill_list(self):
         self.client.force_authenticate(self.manager1)
