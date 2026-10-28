@@ -20,6 +20,7 @@ from . import rules, semantic
 DONE_STATUS = 'completed'
 APPROVED_LEAVE = 'approved'
 HISTORY_TASKS = 20
+TOP_N = 5  # the manager sees the best 5 eligible employees
 
 
 def team_of(manager_user):
@@ -213,7 +214,6 @@ def recommend(
     skills,
     start,
     end,
-    hours,
     task_text='',
 ):
     """
@@ -221,8 +221,7 @@ def recommend(
 
     Filtering:
     - Required skills
-    - Approved leave
-    - Available working hours
+    - Approved leave for the whole period (no working hours left)
 
     Ranking:
     - Skills
@@ -368,8 +367,6 @@ def recommend(
         if not skill.get('required', True)
     ]
 
-    hours = float(hours)
-
     # 6. Filter employees
     eligible = []
     excluded = []
@@ -398,16 +395,12 @@ def recommend(
         )
 
         reason = rules.exclusion_reason(
-            on_leave=(
-                bool(days_off)
-                and capacity == 0
-            ),
+            on_leave=bool(days_off),
             gaps=rules.skill_gaps(
                 has.get(emp.pk, {}),
                 required,
             ),
-            available=capacity - emp_busy,
-            needed_hours=hours,
+            capacity=capacity,
         )
 
         if reason:
@@ -468,4 +461,4 @@ def recommend(
         reverse=True,
     )
 
-    return recommended, excluded
+    return recommended[:TOP_N], excluded

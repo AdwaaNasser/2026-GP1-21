@@ -1,5 +1,3 @@
-from decimal import Decimal
-
 from rest_framework import serializers
 
 from . import rules, services
@@ -22,9 +20,6 @@ class RecommendRequestSerializer(serializers.Serializer):
     skills = TaskSkillSerializer(many=True, required=False, default=list)
     start_date = serializers.DateField()
     due_date = serializers.DateField()
-    estimated_hours = serializers.DecimalField(
-        max_digits=5, decimal_places=2, min_value=Decimal('0.5'),
-    )
 
     def validate_skills(self, skills):
         ids = [s['skill_id'] for s in skills]

@@ -25,7 +25,6 @@ class RecommendEmployeesView(APIView):
             skills=data['skills'],
             start=data['start_date'],
             end=data['due_date'],
-            hours=data['estimated_hours'],
             task_text=f"{data['title']}. {data['description']}".strip(' .'),
         )
         return Response({

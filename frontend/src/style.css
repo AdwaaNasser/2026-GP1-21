@@ -2904,7 +2904,10 @@ a.ws-btn { text-decoration: none; }
 .rec-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .rec-skill { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .rec-skill-name { min-width: 90px; font-weight: 600; }
+.rec-add { display: flex; gap: 8px; }
+.rec-add .ws-input { flex: 1; }
 .rec-empty { margin: 0; color: var(--ws-muted); }
+.rec-chosen { margin: 0; padding: 8px 10px; border-radius: var(--ws-radius); background: var(--ws-surface); font-weight: 600; }
 .rec-list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .rec-person { padding: 10px; border: 1px solid var(--ws-border); border-radius: var(--ws-radius); background: var(--ws-surface); }
 .rec-person-head { display: flex; align-items: center; gap: 10px; }

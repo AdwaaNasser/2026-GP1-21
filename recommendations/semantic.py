@@ -1,4 +1,10 @@
+"""Meaning-based match between the new task and each employee's past work.
 
+Sentence Transformers turns each text into a vector of numbers. Texts with a
+similar meaning get vectors that point the same way, so "Build the sales
+dashboard" is close to "Created the monthly revenue report" even though they
+share no words. The similarity is a number from 0 (unrelated) to 1 (same meaning).
+"""
 import logging
 
 MODEL_NAME = 'all-MiniLM-L6-v2'  # small (~90 MB), English, no training needed

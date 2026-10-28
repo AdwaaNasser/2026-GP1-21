@@ -47,14 +47,15 @@ def skill_gaps(has, required):
     return gaps
 
 
-def exclusion_reason(on_leave, gaps, available, needed_hours):
-    """Why an employee is excluded, or None if they are eligible."""
-    if on_leave:
-        return 'On approved leave for the whole task period'
+def exclusion_reason(on_leave, gaps, capacity):
+    """Why an employee is excluded, or None if they are eligible.
+    on_leave = they have approved leave in the period, capacity = their working hours in it."""
+    if capacity == 0:
+        if on_leave:
+            return 'On approved leave for the whole task period'
+        return 'No working days in the task period'
     if gaps:
         return 'Skills: ' + ', '.join(gaps)
-    if available < needed_hours:
-        return f'Not enough time ({max(available, 0):g}h available, {needed_hours:g}h needed)'
     return None
 
 

@@ -20,7 +20,7 @@ export default function Recommendation({ form, onPick }) {
   const [open, setOpen] = useState(false);
   const [allSkills, setAllSkills] = useState([]);
   const [wanted, setWanted] = useState([]); // [{ skill_id, level, required }]
-  const [hours, setHours] = useState('');
+  const [typed, setTyped] = useState(''); // the skill name the manager is typing
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -40,14 +40,27 @@ export default function Recommendation({ form, onPick }) {
   // Old results no longer match once the task details change, so hide them.
   useEffect(() => {
     setResult(null);
-  }, [form.title, form.description, form.start_date, form.due_date, hours, wanted]);
+  }, [form.title, form.description, form.start_date, form.due_date, wanted]);
 
   const skillName = (id) => (allSkills.find((s) => String(s.id) === String(id)) || {}).name || '';
   const unused = allSkills.filter((s) => !wanted.some((w) => String(w.skill_id) === String(s.id)));
 
-  function addSkill(id) {
-    if (!id) return;
-    setWanted((list) => [...list, { skill_id: id, level: '', required: true }]);
+  // The manager types a skill name; it must match a skill someone in the team has.
+  function addTypedSkill() {
+    const name = typed.trim().toLowerCase();
+    if (!name) return;
+    const skill = allSkills.find((s) => s.name.trim().toLowerCase() === name);
+    if (!skill) {
+      setError(`No one in your team has "${typed.trim()}". Check the spelling or pick a suggestion.`);
+      return;
+    }
+    if (wanted.some((w) => String(w.skill_id) === String(skill.id))) {
+      setError(`${skill.name} is already in the list.`);
+      return;
+    }
+    setError('');
+    setWanted((list) => [...list, { skill_id: skill.id, level: '', required: true }]);
+    setTyped('');
   }
 
   function changeSkill(index, field, value) {
@@ -61,7 +74,6 @@ export default function Recommendation({ form, onPick }) {
   function validate() {
     if (!form.start_date || !form.due_date) return 'Enter the start and due dates first.';
     if (form.due_date < form.start_date) return 'The due date cannot be before the start date.';
-    if (!(Number(hours) >= 0.5)) return 'Enter the estimated hours for this task.';
     return '';
   }
 
@@ -82,7 +94,6 @@ export default function Recommendation({ form, onPick }) {
           description: form.description,
           start_date: form.start_date,
           due_date: form.due_date,
-          estimated_hours: hours,
           skills: wanted.map((w) => ({
             skill_id: Number(w.skill_id),
             level: w.level,
@@ -117,18 +128,6 @@ export default function Recommendation({ form, onPick }) {
       </div>
       <p className="ws-hint">Uses the title, description and dates above. You still choose who gets the task.</p>
 
-      <label className="ws-field">
-        <span className="ws-label">Estimated hours</span>
-        <input
-          className="ws-input"
-          type="number"
-          min="0.5"
-          step="0.5"
-          value={hours}
-          onChange={(event) => setHours(event.target.value)}
-        />
-      </label>
-
       <div className="ws-field">
         <span className="ws-label">Skills <span className="ws-optional">(optional)</span></span>
         {wanted.map((item, index) => (
@@ -156,11 +155,31 @@ export default function Recommendation({ form, onPick }) {
             </button>
           </div>
         ))}
-        {unused.length > 0 && (
-          <select className="ws-select" value="" onChange={(event) => addSkill(event.target.value)}>
-            <option value="">Add a skill…</option>
-            {unused.map((skill) => <option key={skill.id} value={skill.id}>{skill.name}</option>)}
-          </select>
+        <div className="rec-add">
+          <input
+            className="ws-input"
+            list="rec-skill-options"
+            placeholder="Type a skill, e.g. Python"
+            value={typed}
+            onChange={(event) => setTyped(event.target.value)}
+            onKeyDown={(event) => {
+              // Enter adds the skill instead of submitting the task form.
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                addTypedSkill();
+              }
+            }}
+            aria-label="Skill name"
+          />
+          <datalist id="rec-skill-options">
+            {unused.map((skill) => <option key={skill.id} value={skill.name} />)}
+          </datalist>
+          <button type="button" className="ws-btn ws-btn-secondary" onClick={addTypedSkill}>
+            Add
+          </button>
+        </div>
+        {allSkills.length === 0 && (
+          <span className="ws-hint">No one in your team has skills saved yet.</span>
         )}
       </div>
 

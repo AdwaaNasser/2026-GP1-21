@@ -37,10 +37,10 @@ class RulesTests(SimpleTestCase):
         self.assertEqual(rules.skill_gaps({}, required), ['missing Python', 'missing SQL'])
 
     def test_exclusion_reasons(self):
-        self.assertIn('leave', rules.exclusion_reason(True, [], 24, 6))
-        self.assertIn('Skills', rules.exclusion_reason(False, ['missing SQL'], 24, 6))
-        self.assertIn('Not enough time', rules.exclusion_reason(False, [], 2, 6))
-        self.assertIsNone(rules.exclusion_reason(False, [], 6, 6))
+        self.assertIn('leave', rules.exclusion_reason(True, [], 0))
+        self.assertIn('No working days', rules.exclusion_reason(False, [], 0))
+        self.assertIn('Skills', rules.exclusion_reason(False, ['missing SQL'], 24))
+        self.assertIsNone(rules.exclusion_reason(True, [], 8))  # partial leave: still eligible
 
     def test_score_is_between_0_and_1_and_comes_with_reasons(self):
         required = [(1, 'Python', 2)]
@@ -149,7 +149,7 @@ class RecommendApiTests(APITestCase):
         self.client.force_authenticate(user)
         body = {
             'skills': [{'skill_id': self.python.pk, 'level': 'intermediate'}],
-            'start_date': str(START), 'due_date': str(END), 'estimated_hours': '6',
+            'start_date': str(START), 'due_date': str(END),
         }
         body.update(changes)
         return self.client.post(reverse('recommend-employees'), body, format='json')
@@ -159,12 +159,11 @@ class RecommendApiTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.data['eligible_found'])
         names = [r['first_name'] for r in response.data['recommended']]
-        self.assertEqual(names, ['Huda', 'Sara'])  # huda: free + more experience
+        self.assertEqual(names, ['Huda', 'Sara', 'Noura'])  # huda: free + more experience; noura: almost full
         self.assertTrue(all(r['reasons'] for r in response.data['recommended']))
 
     def test_excluded_members_come_with_the_reason(self):
         excluded = {e['first_name']: e['reason'] for e in self.ask(self.manager1).data['excluded']}
-        self.assertIn('Not enough time', excluded['Noura'])
         self.assertIn('missing Python', excluded['Maha'])
         self.assertIn('leave', excluded['Reem'])
 
@@ -229,17 +228,15 @@ class RecommendApiTests(APITestCase):
     def test_without_the_model_ranking_still_works(self):
         with patch.object(semantic, 'get_model', side_effect=ImportError):
             data = self.ask(self.manager1, title='Sales dashboard').data
-        self.assertEqual([r['first_name'] for r in data['recommended']], ['Huda', 'Sara'])
+        self.assertEqual([r['first_name'] for r in data['recommended']], ['Huda', 'Sara', 'Noura'])
 
     def test_partial_leave_only_removes_those_days(self):
         annual = LeaveType.objects.get(name='Annual')
         LeaveRequest.objects.create(employee=self.huda, leave_type=annual, status='approved',
                                     start_date=date(2026, 11, 2), end_date=date(2026, 11, 3))
-        data = self.ask(self.manager1).data  # huda keeps Sunday: 8h, the task needs 6h
+        data = self.ask(self.manager1).data  # huda keeps Sunday: 8h
         huda = next(r for r in data['recommended'] if r['first_name'] == 'Huda')
         self.assertIn('8h available', huda['reasons'][-1])
-        excluded = {e['first_name']: e['reason'] for e in self.ask(self.manager1, estimated_hours='9').data['excluded']}
-        self.assertIn('Not enough time', excluded['Huda'])
 
     def test_long_tasks_only_count_their_share_of_the_period(self):
         # 40h spread over 10 working days (Nov 1-12) = 4h a day; Nov 1-3 holds 3 days = 12h.
@@ -278,15 +275,29 @@ class RecommendApiTests(APITestCase):
         names = [r['first_name'] for r in only_optional['recommended']]
         self.assertIn('Sara', names)  # has no React, but it is optional
 
+    def test_only_the_top_5_are_recommended(self):
+        for i in range(6):  # 6 more free Python developers: 8 eligible in total
+            person = Employee.objects.create(
+                user=make_user(self.maha.user.org, f'dev{i}@acme.test', 'Employee'),
+                system_role='Employee')
+            EmployeeSkill.objects.create(employee=person, skill=self.python, skill_level='expert')
+        data = self.ask(self.manager1).data
+        self.assertEqual(len(data['recommended']), 5)
+        scores = [r['score'] for r in data['recommended']]
+        self.assertEqual(scores, sorted(scores, reverse=True))
+
     def test_no_eligible_member_means_manual_assignment(self):
-        data = self.ask(self.manager1, estimated_hours='500').data
+        # Nobody has Python at expert level AND React: no one is eligible.
+        data = self.ask(self.manager1, skills=[
+            {'skill_id': self.python.pk, 'level': 'expert'},
+            {'skill_id': self.react.pk},
+        ]).data
         self.assertFalse(data['eligible_found'])
         self.assertEqual(data['recommended'], [])
 
     def test_bad_input_is_refused(self):
         bad = [
             {'due_date': '2026-10-01'},
-            {'estimated_hours': '0'},
             {'skills': [{'skill_id': self.python.pk, 'level': 'guru'}]},
             {'skills': [{'skill_id': 999999}]},
             {'skills': [{'skill_id': self.python.pk}, {'skill_id': self.python.pk}]},
