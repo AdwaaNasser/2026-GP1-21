@@ -414,4 +414,3 @@ class HRYearsView(APIView):
                 {'year': year, **org_summary(org_id, year, today)} for year in years
             ],
         })
-
