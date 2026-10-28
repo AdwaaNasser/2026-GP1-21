@@ -1,3 +1,7 @@
 from django.urls import path
 
-urlpatterns = []
+from .views import RecommendEmployeesView
+
+urlpatterns = [
+    path('', RecommendEmployeesView.as_view(), name='recommend-employees'),
+]
