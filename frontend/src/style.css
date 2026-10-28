@@ -2893,3 +2893,24 @@ body { background: linear-gradient(180deg, #fbf1e8 0%, #fdf8f3 100%) fixed; }
 .ws-pill-ok { background: #e7f4ee; color: #1f6b4a; }
 .ws-pill-warn { background: #fff1e6; color: #b4530b; }
 a.ws-btn { text-decoration: none; }
+
+/* ---------- Recommendation (recommend employees in the task form) ---------- */
+.rec-open { align-self: flex-start; }
+.rec-panel {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 14px; border: 1px solid var(--ws-border); border-radius: var(--ws-radius);
+  background: var(--ws-accent-soft);
+}
+.rec-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.rec-skill { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rec-skill-name { min-width: 90px; font-weight: 600; }
+.rec-empty { margin: 0; color: var(--ws-muted); }
+.rec-list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.rec-person { padding: 10px; border: 1px solid var(--ws-border); border-radius: var(--ws-radius); background: var(--ws-surface); }
+.rec-person-head { display: flex; align-items: center; gap: 10px; }
+.rec-person-head strong { flex: 1; }
+.rec-score { color: var(--ws-muted); font-size: 13px; }
+.rec-reasons { margin: 6px 0 0; padding-left: 18px; color: var(--ws-muted); font-size: 13px; }
+.rec-excluded { font-size: 13px; }
+.rec-excluded summary { cursor: pointer; color: var(--ws-muted); }
+.rec-excluded ul { margin: 6px 0 0; padding-left: 18px; }

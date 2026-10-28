@@ -1,5 +1,6 @@
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
 from accounts.models import Skill
 from goals.permissions import IsManager
 
@@ -31,7 +32,7 @@ class RecommendEmployeesView(APIView):
             'recommended': recommended,
             'excluded': excluded,
         })
-    
+
 
 class SkillListView(APIView):
     """GET: every skill the manager can choose from when asking for recommendations."""

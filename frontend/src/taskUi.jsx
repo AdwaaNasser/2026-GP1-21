@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiRequest, displayName, responseData } from './api.js';
+import Recommendation from './Recommendation.jsx';
 
 export const PRIORITIES = [
   ['low', 'Low'],
@@ -579,6 +580,7 @@ export function TaskForm({ task, projects, employees, lockedProjectId, onSubmit,
         </label>
       </div>
 
+      {!task && <Recommendation form={form} onPick={(id) => setField('assignee', id)} />}
 
       <label className="ws-field">
         <span className="ws-label">Task privacy</span>
@@ -800,4 +802,3 @@ export function TaskPanel({ task, role, onEdit, onAdvance, onReview, projectHref
     </div>
   );
 }
-
