@@ -59,6 +59,17 @@ class RulesTests(SimpleTestCase):
         self.assertEqual(len(more_reasons), len(reasons) + 1)
         self.assertIn('90% similar', more_reasons[-1])
 
+    def test_no_listed_skills_means_skill_and_experience_are_not_counted(self):
+        # Nothing to compare against: only free time decides, not a made-up 1 or 0.
+        score, reasons = rules.score({}, [], [], 0, 0, 6, 24)
+        self.assertEqual(score, 0.75)  # 1 - 6/24
+        self.assertFalse(any('finished task' in reason for reason in reasons))
+
+    def test_experience_is_left_out_when_nobody_in_the_team_has_any(self):
+        required = [(1, 'Python', 2)]
+        score, _ = rules.score({1: 4}, required, [], 0, 0, 0, 24)
+        self.assertEqual(score, 1.0)  # skill 4/4 and free time 1; experience unknown
+
     def test_lighter_workload_ranks_higher_when_all_else_is_equal(self):
         required = [(1, 'Python', 2)]
         free, _ = rules.score({1: 3}, required, [], 1, 2, 0, 24)
@@ -288,6 +299,18 @@ class RecommendApiTests(APITestCase):
         self.assertEqual(self.ask(self.hr).status_code, 403)
         response = APIClient().post(reverse('recommend-employees'), {}, format='json')
         self.assertIn(response.status_code, (401, 403))
+
+    def test_skills_of_another_company_are_hidden_and_refused(self):
+        # A second company with its own skill: manager1 must not see or use it.
+        other_org = Organization.objects.create(name='Other Co')
+        stranger = Employee.objects.create(
+            user=make_user(other_org, 'x@other.test', 'Employee'), system_role='Employee')
+        cobol = Skill.objects.create(name='Cobol')
+        EmployeeSkill.objects.create(employee=stranger, skill=cobol, skill_level='expert')
+        self.client.force_authenticate(self.manager1)
+        names = [s['name'] for s in self.client.get(reverse('recommend-skills')).data]
+        self.assertNotIn('Cobol', names)
+        self.assertEqual(self.ask(self.manager1, skills=[{'skill_id': cobol.pk}]).status_code, 400)
 
     def test_manager_gets_the_skill_list(self):
         self.client.force_authenticate(self.manager1)

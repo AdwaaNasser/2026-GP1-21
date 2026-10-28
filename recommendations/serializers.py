@@ -2,9 +2,7 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
-from accounts.models import Skill
-
-from . import rules
+from . import rules, services
 
 
 class TaskSkillSerializer(serializers.Serializer):
@@ -32,7 +30,11 @@ class RecommendRequestSerializer(serializers.Serializer):
         ids = [s['skill_id'] for s in skills]
         if len(ids) != len(set(ids)):
             raise serializers.ValidationError('Each skill can only be listed once.')
-        found = set(Skill.objects.filter(pk__in=ids).values_list('pk', flat=True))
+        # Only skills of the manager's own company (the skills table is shared).
+        found = set(
+            services.company_skills(self.context.get('org_id'))
+            .filter(pk__in=ids).values_list('pk', flat=True)
+        )
         unknown = [i for i in ids if i not in found]
         if unknown:
             raise serializers.ValidationError(f'Unknown skill: {unknown}')

@@ -1,7 +1,6 @@
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.models import Skill
 from goals.permissions import IsManager
 
 from . import services
@@ -16,7 +15,9 @@ class RecommendEmployeesView(APIView):
     permission_classes = [IsManager]
 
     def post(self, request):
-        serializer = RecommendRequestSerializer(data=request.data)
+        serializer = RecommendRequestSerializer(
+            data=request.data, context={'org_id': request.user.org_id},
+        )
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         recommended, excluded = services.recommend(
@@ -35,10 +36,10 @@ class RecommendEmployeesView(APIView):
 
 
 class SkillListView(APIView):
-    """GET: every skill the manager can choose from when asking for recommendations."""
+    """GET: the skills of the manager's own company, to choose from when asking for recommendations."""
 
     permission_classes = [IsManager]
 
     def get(self, request):
-        skills = Skill.objects.order_by('name').values_list('skill_id', 'name')
+        skills = services.company_skills(request.user.org_id).order_by('name').values_list('skill_id', 'name')
         return Response([{'id': skill_id, 'name': name} for skill_id, name in skills])

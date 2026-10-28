@@ -22,6 +22,15 @@ APPROVED_LEAVE = 'approved'
 HISTORY_TASKS = 20
 
 
+def company_skills(org_id):
+    """Skills used in this organization. The skills table is shared by every
+    company, so only skills that this company's employees or tasks use are shown."""
+    return Skill.objects.filter(
+        Q(employee_records__employee__user__org_id=org_id)
+        | Q(task_records__task__employee__user__org_id=org_id)
+    ).distinct()
+
+
 def work_histories(employee_ids):
     """Get recent completed-task descriptions for each employee."""
     texts = {}

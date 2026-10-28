@@ -189,13 +189,13 @@ export default function Recommendation({ form, onPick }) {
               <div className="rec-person-head">
                 <strong>{displayName(person)}</strong>
                 <span className="rec-score">{Math.round(person.score * 100)}% match</span>
+                {/* Pressing it again clears the choice, so the manager can change their mind. */}
                 <button
                   type="button"
                   className={`ws-btn ws-btn-sm ${isChosen(person) ? 'ws-btn-secondary' : 'ws-btn-primary'}`}
-                  onClick={() => onPick(String(person.employee_id))}
-                  disabled={isChosen(person)}
+                  onClick={() => onPick(isChosen(person) ? '' : String(person.employee_id))}
                 >
-                  {isChosen(person) ? 'Chosen' : 'Choose'}
+                  {isChosen(person) ? 'Unselect' : 'Choose'}
                 </button>
               </div>
               <ul className="rec-reasons">
