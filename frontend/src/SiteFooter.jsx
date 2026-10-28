@@ -1,7 +1,7 @@
 const LINKS = [
   ['#burnout', 'Burnout insights'],
   ['#about', 'About us'],
-  ['#faq', 'FAQ'],
+  ['#faq', 'Get to know us'],
   ['/login', 'Log in'],
 ];
 
