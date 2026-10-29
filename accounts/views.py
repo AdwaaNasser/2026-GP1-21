@@ -13,6 +13,7 @@ from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
 from django.db import IntegrityError, transaction
 from django.db.models import Q
+from django.utils import timezone
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from rest_framework import serializers, status
@@ -153,6 +154,12 @@ def _find_manager(manager_id, organization_id):
     return Manager.objects.filter(pk=manager_id, user__org_id=organization_id).first()
 
 
+def _invitation_pending(user):
+    # An account has no usable password until the person accepts the invitation.
+    check = getattr(user, 'has_usable_password', None)
+    return bool(callable(check) and not check())
+
+
 def _employee_data(user):
     return {
         'id': user.pk,
@@ -162,6 +169,8 @@ def _employee_data(user):
         'role': user.role,
         'role_label': user.get_role_display(),
         'job_title': user.job_title or '',
+        'gender': user.gender or '',
+        'invitation_pending': _invitation_pending(user),
         'hire_date': _hire_date_of(user),
         'manager': _manager_of(user),
         'allowed_absence_days': user.allowed_absence_days or 0,
@@ -204,7 +213,6 @@ class OrganizationSetupSerializer(serializers.Serializer):
     last_name = serializers.CharField(max_length=255)
     email = serializers.EmailField(max_length=255)
     password = serializers.CharField(write_only=True, trim_whitespace=False)
-    hire_date = serializers.DateField()
 
     def validate_organization_name(self, value):
         value = value.strip()
@@ -254,7 +262,7 @@ class OrganizationSetupView(APIView):
                     password=data['password'],
                     role='HR',
                     organization=organization,
-                    hire_date=data['hire_date'],
+                    hire_date=timezone.localdate(),  # the setup form does not ask for it
                 )
         except IntegrityError:
             return Response(

@@ -7,7 +7,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.models import Employee, EmployeeSkill, Evaluation, Goal, Task, TaskGoal
+from accounts.models import Employee, EmployeeSkill, Goal, Task, TaskGoal
 from workspace.permissions import is_manager
 
 from . import rules, services
@@ -92,7 +92,6 @@ class EmployeeGoalsView(APIView):
     def check(self, items, existing, year, today):
         errors, seen = [], set()
         for number, item in enumerate(items, start=1):
-            start, end = rules.period_dates(item['period'], year)
             goal = existing.get(item.get('id')) if item.get('id') is not None else None
             if item.get('id') is not None:
                 if goal is None or item['id'] in seen:
@@ -106,14 +105,11 @@ class EmployeeGoalsView(APIView):
     def save_set(self, manager_user, employee, year, items, existing, today):
         kept = set()
         for item in items:
-            start, end = rules.period_dates(item['period'], year)
             values = {
                 'name': item['name'],
                 'description': item.get('description'),
                 'type': item['type'],
                 'time_period': item['period'],
-                'period_start': start,
-                'period_end': end,
                 'target_value': item['target'],
                 'weight': item['weight'],
             }
@@ -146,12 +142,14 @@ class GoalActualView(APIView):
             return not_found('Goal not found in your team.')
         if goal.type != rules.MANUAL:
             return bad_request({'detail': 'Only Manual goals take an achieved value.'})
-        if services.is_frozen(goal.employee, goal.evaluation_year):
+        if services.is_frozen(goal.evaluation_year):
             return bad_request({'detail': 'This evaluation is final and cannot change.'})
         serializer = ActualValueSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         goal.actual_value = serializer.validated_data['actual_value']
         goal.save(update_fields=['actual_value'])
+        services.refresh_overall_score(goal.employee_id, goal.evaluation_year)
+        goal.refresh_from_db()
         return Response(services.goal_data(goal, timezone.localdate()))
 
 
@@ -189,7 +187,7 @@ class GoalTasksView(APIView):
             return not_found('Goal not found in your team.')
         if goal.type != rules.TASK_BASED:
             return bad_request({'detail': 'Only Task-based goals have linked tasks.'})
-        if services.is_frozen(goal.employee, goal.evaluation_year):
+        if services.is_frozen(goal.evaluation_year):
             return bad_request({'detail': 'This evaluation is final and cannot change.'})
         serializer = LinkedTasksSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -200,6 +198,7 @@ class GoalTasksView(APIView):
         with transaction.atomic():
             TaskGoal.objects.filter(goal_id=goal.pk).delete()
             TaskGoal.objects.bulk_create([TaskGoal(task=t, goal=goal) for t in tasks])
+        services.refresh_overall_score(goal.employee_id, goal.evaluation_year)
         goal = team_goal(request, goal_id)
         return Response(services.goal_data(goal, timezone.localdate()))
 
@@ -386,14 +385,9 @@ def org_summary(org_id, year, today):
         Goal.objects.filter(evaluation_year=year, employee__user__org_id=org_id)
         .prefetch_related('task_records__task')
     )
-    frozen = set(
-        Evaluation.objects.filter(
-            evaluation_year=year, is_final=True, employee__user__org_id=org_id,
-        ).values_list('employee_id', flat=True)
-    )
     by_period, by_employee = {}, {}
     for goal in goals:
-        result = services.goal_result(goal, today, frozen=goal.employee_id in frozen)
+        result = services.goal_result(goal, today)
         by_period.setdefault(goal.time_period, []).append(result['rating'])
         by_employee.setdefault(goal.employee_id, []).append((result['rating'], goal.weight))
 

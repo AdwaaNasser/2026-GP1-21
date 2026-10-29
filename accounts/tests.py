@@ -16,7 +16,6 @@ from .models import (
     BurnoutSurvey,
     Employee,
     EmployeeSkill,
-    Evaluation,
     Goal,
     LeaveRequest,
     LeaveType,
@@ -33,6 +32,7 @@ from .models import (
 )
 from .permissions import IsHRProfessional
 from .views import (
+    _invitation_pending,
     CSVEmployeeImportView,
     CSVImportInviteAllView,
     EmployeeDetailView,
@@ -44,6 +44,7 @@ from .views import (
     TeamInviteView,
     _change_password,
     _create_account,
+    _employee_data,
     _employees_visible_to,
     _send_invitation_email,
     _send_password_reset_email,
@@ -68,7 +69,6 @@ class SchemaTests(SimpleTestCase):
             'meetingschedule',
             'goal',
             'task_goal',
-            'evaluation',
             'predictionfactor',
             'burnoutsurvey',
             'burnoutprediction',
@@ -89,7 +89,6 @@ class SchemaTests(SimpleTestCase):
             MeetingSchedule,
             Goal,
             TaskGoal,
-            Evaluation,
             PredictionFactor,
             BurnoutSurvey,
             BurnoutPrediction,
@@ -139,7 +138,6 @@ class SchemaTests(SimpleTestCase):
                 'last_name': 'Almutairi',
                 'email': 'raghad@example.com',
                 'password': 'ValidPassword123!',
-                'hire_date': '2024-01-15',
             },
         )
         with (
@@ -150,9 +148,8 @@ class SchemaTests(SimpleTestCase):
             self.assertTrue(serializer.is_valid(), serializer.errors)
         self.assertEqual(serializer.validated_data['first_name'], 'Raghad')
         self.assertEqual(serializer.validated_data['last_name'], 'Almutairi')
-        self.assertEqual(str(serializer.validated_data['hire_date']), '2024-01-15')
 
-    def test_organization_setup_requires_hire_date(self):
+    def test_organization_setup_does_not_ask_for_a_hire_date(self):
         serializer = OrganizationSetupSerializer(
             data={
                 'organization_name': 'Example Org',
@@ -162,10 +159,7 @@ class SchemaTests(SimpleTestCase):
                 'password': 'ValidPassword123!',
             },
         )
-        with patch('accounts.views.User.objects.filter') as filter_users:
-            filter_users.return_value.exists.return_value = False
-            self.assertFalse(serializer.is_valid())
-        self.assertIn('hire_date', serializer.errors)
+        self.assertNotIn('hire_date', serializer.fields)
 
     def test_organization_setup_rejects_combined_name_field(self):
         serializer = OrganizationSetupSerializer(
@@ -242,6 +236,13 @@ class AccountApiTests(SimpleTestCase):
                     result,
                     filter_users.return_value.select_related.return_value.filter.return_value,
                 )
+
+    def test_employee_data_tells_whether_the_invitation_is_still_pending(self):
+        waiting = SimpleNamespace(has_usable_password=lambda: False)
+        active = SimpleNamespace(has_usable_password=lambda: True)
+
+        self.assertTrue(_invitation_pending(waiting))
+        self.assertFalse(_invitation_pending(active))
 
     def test_login_rejects_invalid_credentials(self):
         request = self.factory.post(
@@ -602,7 +603,11 @@ class AccountApiTests(SimpleTestCase):
             format='json',
         )
         force_authenticate(request, user=self.hr_user())
-        with patch('accounts.views._find_manager', return_value=None):
+        with (
+            patch('accounts.views._find_manager', return_value=None),
+            patch('accounts.views.User.objects.filter') as filter_users,
+        ):
+            filter_users.return_value.exists.return_value = False
             response = TeamInviteView.as_view()(request)
         self.assertEqual(response.status_code, 400)
         self.assertIn('manager_id', response.data)
@@ -724,6 +729,7 @@ class AccountApiTests(SimpleTestCase):
             last_name='One',
             role='Employee',
             job_title='Analyst',
+            gender='',
             employee_record=employee_record,
             allowed_absence_days=0,
             department=None,
@@ -750,7 +756,7 @@ class AccountApiTests(SimpleTestCase):
         employee_record = SimpleNamespace(hire_date=None, manager=None, save=MagicMock())
         user = SimpleNamespace(
             pk=33, email='person@example.com', first_name='Person', last_name='One',
-            role='Employee', job_title='Analyst', employee_record=employee_record,
+            role='Employee', job_title='Analyst', gender='', employee_record=employee_record,
             allowed_absence_days=0, department=None, save=MagicMock(),
             get_role_display=lambda: 'Employee',
         )

@@ -2921,3 +2921,37 @@ a.ws-btn { text-decoration: none; }
 .rec-excluded { font-size: 13px; }
 .rec-excluded summary { cursor: pointer; color: var(--ws-muted); }
 .rec-excluded ul { margin: 6px 0 0; padding-left: 18px; }
+/* HR dashboard: success messages pop up in the corner and fade away */
+/* HR dashboard: success messages pop up in the middle of the screen and fade away */
+.status-toast {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(31, 29, 28, 0.28);
+  pointer-events: none;
+  animation: status-toast-in 0.2s ease-out;
+}
+.status-toast .status-banner,
+.dashboard-in-shell .status-toast .status-banner {
+  width: min(420px, 100%);
+  margin: 0;
+  padding: 22px 24px;
+  align-items: center;
+  gap: 14px;
+  font-size: 15px;
+  font-weight: 600;
+  box-shadow: 0 20px 60px rgba(31, 29, 28, 0.28);
+}
+@keyframes status-toast-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.status-toast .status-banner,
+.dashboard-in-shell .status-toast .status-banner {
+  margin: 0;
+  box-shadow: 0 10px 30px rgba(31, 29, 28, 0.18);
+}

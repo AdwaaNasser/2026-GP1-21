@@ -7,7 +7,7 @@ from django.test import SimpleTestCase, override_settings
 from rest_framework.test import APIRequestFactory, APITestCase, force_authenticate
 
 from accounts.models import (
-    Employee, EmployeeSkill, Evaluation, Goal, Manager, Organization, Project, Skill, Task,
+    Employee, EmployeeSkill, Goal, Manager, Organization, Project, Skill, Task,
     TaskGoal, User,
 )
 
@@ -67,7 +67,9 @@ class TeamPerformanceViewTests(SimpleTestCase):
         )
         employee = SimpleNamespace(
             pk=17,
-            user=SimpleNamespace(first_name='Sara', last_name='Ali'),
+            user=SimpleNamespace(
+                first_name='Sara', last_name='Ali', job_title='Analyst', department='People',
+            ),
         )
         with (
             patch('goals.permissions.is_manager', return_value=True),
@@ -354,7 +356,69 @@ class GoalsApiTests(APITestCase):
         with patch('django.utils.timezone.localdate', return_value=date(2027, 1, 6)):
             data = self.client.get('/performance/?year=2026').data
         self.assertEqual(data['overall_score'], 4.0)
-        self.assertEqual(Evaluation.objects.filter(is_final=True).count(), 1)
+        goal.refresh_from_db()
+        self.assertEqual(goal.rating, 4)   # the result is kept on the goal itself
+
+    def test_dates_are_derived_from_the_period_and_the_year(self):
+        self.save_goals([goal_input('A', 'Q4', '100')])
+        goal = Goal.objects.get(name='A')
+        self.assertEqual((goal.period_start, goal.period_end), (date(2026, 10, 1), date(2026, 12, 31)))
+        stored = {field.name for field in Goal._meta.get_fields()}
+        self.assertNotIn('period_start', stored)
+        self.assertNotIn('period_end', stored)
+
+    def test_overall_score_is_stored_and_follows_the_goals(self):
+        self.save_goals([goal_input('A', 'Q4', '60', target='4'), goal_input('B', 'Q4', '40', target='4')])
+        Goal.objects.filter(name='A').update(actual_value=Decimal('4'))   # 100% -> 4
+        Goal.objects.filter(name='B').update(actual_value=Decimal('2'))   # 50%  -> 1
+        self.client.force_authenticate(self.sara)
+        self.assertEqual(self.client.get('/performance/?year=2026').data['overall_score'], 2.8)
+        self.assertEqual({g.overall_score for g in Goal.objects.all()}, {Decimal('2.80')})
+
+    def test_overall_score_is_refreshed_when_a_linked_task_changes(self):
+        self.save_goals([goal_input('Quality', 'Q4', '100', kind='Task-based', target='1')])
+        goal = Goal.objects.get(name='Quality')
+        task = Task.objects.create(
+            title='t', status='in_progress', due_date=date(2026, 11, 2),
+            project=self.project, employee=Employee.objects.get(pk=self.sara.pk),
+        )
+        TaskGoal.objects.create(task=task, goal=goal)
+        goal.refresh_from_db()
+        self.assertEqual(goal.overall_score, Decimal('1.00'))   # 0 of 1 task -> rating 1
+        task.status = 'completed'
+        task.save()
+        goal.refresh_from_db()
+        self.assertEqual(goal.overall_score, Decimal('4.00'))   # 1 of 1 -> 100% -> rating 4
+
+    def test_task_count_is_kept_when_the_year_ends(self):
+        self.save_goals([goal_input('Quality', 'Q4', '100', kind='Task-based', target='2')])
+        goal = Goal.objects.get(name='Quality')
+        task = Task.objects.create(
+            title='t', status='completed', due_date=date(2026, 11, 2),
+            project=self.project, employee=Employee.objects.get(pk=self.sara.pk),
+        )
+        TaskGoal.objects.create(task=task, goal=goal)
+        self.client.force_authenticate(self.sara)
+        with patch('django.utils.timezone.localdate', return_value=date(2027, 1, 5)):
+            first = self.client.get('/performance/?year=2026').data
+        task.status = 'in_progress'   # a late change must not alter the final result
+        task.save()
+        with patch('django.utils.timezone.localdate', return_value=date(2027, 1, 6)):
+            second = self.client.get('/performance/?year=2026').data
+        self.assertEqual(first['goals'][0]['achieved'], 1.0)
+        self.assertEqual(second['goals'][0]['achieved'], 1.0)
+        self.assertEqual(first['overall_score'], second['overall_score'])
+        self.assertTrue(second['is_final'])
+        goal.refresh_from_db()
+        self.assertEqual(goal.actual_value, 1)
+
+    def test_a_finished_year_cannot_be_changed(self):
+        self.save_goals([goal_input('A', 'Q4', '100', target='4')])
+        goal = Goal.objects.get(name='A')
+        self.client.force_authenticate(self.boss)
+        with patch('django.utils.timezone.localdate', return_value=date(2027, 1, 5)):
+            response = self.client.patch(f'/goals/{goal.pk}/actual/', {'actual_value': '3'}, format='json')
+        self.assertEqual(response.status_code, 400)
 
     def test_employee_sees_only_own_performance_and_manager_needs_employee_param(self):
         self.client.force_authenticate(self.boss)
@@ -379,7 +443,6 @@ class GoalsApiTests(APITestCase):
         Goal.objects.create(
             name='Old', type='Manual', time_period='annual', weight=Decimal('100'),
             target_value=Decimal('10'), actual_value=Decimal(actual),
-            period_start=date(2025, 1, 1), period_end=date(2025, 12, 31),
             evaluation_year=2025, manager_id=self.boss.pk,
             employee=Employee.objects.get(pk=self.sara.pk),
         )

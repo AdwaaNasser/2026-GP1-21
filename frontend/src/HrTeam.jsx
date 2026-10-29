@@ -331,6 +331,61 @@ function CsvImport({ onImported, success, failure }) {
 
 // ---------- The page ----------
 
+function PeopleTable({ list, onEdit, onInvite }) {
+  return (
+    <div className="ws-table-card">
+      <table className="ws-table">
+        <thead>
+          <tr>
+            <th>Name</th><th>Role</th><th>Job title</th><th>Direct manager</th><th>Gender</th><th>Department</th><th>Hired</th><th>Absence days</th><th>Status</th><th aria-label="Actions" />
+          </tr>
+        </thead>
+        <tbody>
+          {list.map((person) => (
+            <tr key={person.id}>
+              <td>
+                <div className="hr-person">
+                  <Avatar person={person} size={28} />
+                  <div>
+                    <div className="ws-task-title">{displayName(person)}</div>
+                    <div className="ws-task-sub">{person.email}</div>
+                  </div>
+                </div>
+              </td>
+              <td>{person.role_label || '—'}</td>
+              <td>{person.job_title || '—'}</td>
+              <td>{person.role_label === 'Employee' ? (person.manager ? person.manager.name : <span className="ws-pill ws-pill-warn">Not assigned</span>) : '—'}</td>
+              <td>{person.gender || '—'}</td>
+              <td>{person.department.name || '—'}</td>
+              <td>{formatDate(person.hire_date)}</td>
+              <td>{person.allowed_absence_days}</td>
+              <td>
+                <span className={`ws-pill ${person.invitation_pending ? 'ws-pill-warn' : 'ws-pill-ok'}`}>
+                  {person.invitation_pending ? 'Invite pending' : 'Active'}
+                </span>
+              </td>
+              <td>
+                <div className="ws-row-actions">
+                  {person.invitation_pending && (
+                    <button className="ws-btn ws-btn-secondary ws-btn-sm" type="button" onClick={() => onInvite(person)}>
+                      Send invite
+                    </button>
+                  )}
+                  <button className="ws-btn ws-btn-secondary ws-btn-sm" type="button" onClick={() => onEdit(person)}>
+                    <Icon name="edit" size={13} />
+                    Edit
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+
 function TeamContent() {
   const { banner, success, failure, clear } = useBanner();
   const [people, setPeople] = useState(null); // null while loading
@@ -383,19 +438,43 @@ function TeamContent() {
 
   const managers = useMemo(() => (people || []).filter((person) => person.role_label === 'Manager'), [people]);
 
+  // New people wait at the top until they set their own password.
+  const waiting = useMemo(
+    () => (people || []).filter((person) => person.invitation_pending).sort((a, b) => b.id - a.id),
+    [people],
+  );
+  const active = useMemo(() => (people || []).filter((person) => !person.invitation_pending), [people]);
+
   const shown = useMemo(() => {
     const text = search.trim().toLowerCase();
-    if (!text) return people || [];
-    return (people || []).filter((person) =>
+    if (!text) return active;
+    return active.filter((person) =>
       `${displayName(person)} ${person.email} ${person.role_label} ${person.job_title} ${person.department.name} ${person.gender}`
         .toLowerCase()
         .includes(text),
     );
-  }, [people, search]);
+  }, [active, search]);
 
   return (
     <>
-      <Banner message={banner.message} isError={banner.isError} onClose={clear} />
+      <div className={banner.isError ? undefined : 'gl-toast'}>
+        <Banner message={banner.message} isError={banner.isError} onClose={clear} />
+      </div>
+
+      {waiting.length > 0 && (
+        <section className="ws-card ws-side-card" id="waiting">
+          <div className="ws-card-head">
+            <div>
+              <h3>Newly added</h3>
+              <p>
+                {waiting.length} {waiting.length === 1 ? 'person has' : 'people have'} not set a password yet.
+                They move to the list below once they do.
+              </p>
+            </div>
+          </div>
+          <PeopleTable list={waiting} onEdit={setEditing} onInvite={sendInvite} />
+        </section>
+      )}
 
       <CsvImport onImported={load} success={success} failure={failure} />
 
@@ -403,7 +482,7 @@ function TeamContent() {
         <div className="ws-card-head ws-card-head-actions">
           <div>
             <h3>People in your organization</h3>
-            <p>{people === null ? 'Loading…' : `${people.length} ${people.length === 1 ? 'person' : 'people'}`}</p>
+            <p>{people === null ? 'Loading…' : `${active.length} ${active.length === 1 ? 'person' : 'people'}`}</p>
           </div>
           <div className="ws-card-tools">
             <label className="ws-search">
@@ -425,64 +504,16 @@ function TeamContent() {
 
         {people === null ? (
           <TableSkeleton />
-        ) : people.length === 0 ? (
-          <EmptyState icon="users" title="No people yet">
-            Add your first person, or import a CSV file above.
+        ) : active.length === 0 ? (
+          <EmptyState icon="users" title="No one has set up an account yet">
+            {waiting.length > 0 ? 'People appear here after they set their password.' : 'Add your first person, or import a CSV file.'}
           </EmptyState>
         ) : shown.length === 0 ? (
           <EmptyState icon="search" title="No one matches your search">
             Try a different name, email, job title or department.
           </EmptyState>
         ) : (
-          <div className="ws-table-card">
-            <table className="ws-table">
-              <thead>
-                <tr>
-                  <th>Name</th><th>Role</th><th>Job title</th><th>Direct manager</th><th>Gender</th><th>Department</th><th>Hired</th><th>Absence days</th><th>Status</th><th aria-label="Actions" />
-                </tr>
-              </thead>
-              <tbody>
-                {shown.map((person) => (
-                  <tr key={person.id}>
-                    <td>
-                      <div className="hr-person">
-                        <Avatar person={person} size={28} />
-                        <div>
-                          <div className="ws-task-title">{displayName(person)}</div>
-                          <div className="ws-task-sub">{person.email}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td>{person.role_label || '—'}</td>
-                    <td>{person.job_title || '—'}</td>
-                    <td>{person.role_label === 'Employee' ? (person.manager ? person.manager.name : <span className="ws-pill ws-pill-warn">Not assigned</span>) : '—'}</td>
-                    <td>{person.gender || '—'}</td>
-                    <td>{person.department.name || '—'}</td>
-                    <td>{formatDate(person.hire_date)}</td>
-                    <td>{person.allowed_absence_days}</td>
-                    <td>
-                      <span className={`ws-pill ${person.invitation_pending ? 'ws-pill-warn' : 'ws-pill-ok'}`}>
-                        {person.invitation_pending ? 'Invite pending' : 'Active'}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="ws-row-actions">
-                        {person.invitation_pending && (
-                          <button className="ws-btn ws-btn-secondary ws-btn-sm" type="button" onClick={() => sendInvite(person)}>
-                            Send invite
-                          </button>
-                        )}
-                        <button className="ws-btn ws-btn-secondary ws-btn-sm" type="button" onClick={() => setEditing(person)}>
-                          <Icon name="edit" size={13} />
-                          Edit
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <PeopleTable list={shown} onEdit={setEditing} onInvite={sendInvite} />
         )}
       </section>
 

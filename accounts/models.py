@@ -339,7 +339,7 @@ class Goal(models.Model):
         blank=True,
         null=True,
     )
-    # Period code of the goal: annual, Q1-Q4 or M1-M12 (the dates are in period_start/period_end).
+    # Period code of the goal: annual, Q1-Q4 or M1-M12 (the start and end dates are derived from it and the year).
     time_period = models.CharField(max_length=100, blank=True, null=True)
     rating = models.DecimalField(
         max_digits=3,
@@ -364,8 +364,11 @@ class Goal(models.Model):
         null=True,
     )
     evaluation_year = models.PositiveSmallIntegerField(blank=True, null=True)
-    period_start = models.DateField(blank=True, null=True)
-    period_end = models.DateField(blank=True, null=True)
+    # Derived (/overallScore): the employee's overall score for this year, calculated
+    # from the goal ratings and refreshed whenever a goal or a linked task changes.
+    overall_score = models.DecimalField(
+        max_digits=5, decimal_places=2, blank=True, null=True,
+    )
     target_value = models.DecimalField(
         max_digits=10, decimal_places=2, blank=True, null=True,
     )
@@ -375,6 +378,23 @@ class Goal(models.Model):
 
     class Meta:
         db_table = 'goal'
+
+    @property
+    def period_start(self):
+        """Derived: first day of the period (not stored)."""
+        return self._period()[0]
+
+    @property
+    def period_end(self):
+        """Derived: last day of the period (not stored)."""
+        return self._period()[1]
+
+    def _period(self):
+        from goals import rules
+
+        if not self.time_period or self.evaluation_year is None:
+            return None, None
+        return rules.period_dates(self.time_period, self.evaluation_year)
 
 
 class TaskGoal(models.Model):
@@ -394,42 +414,6 @@ class TaskGoal(models.Model):
 
     class Meta:
         db_table = 'task_goal'
-
-
-class Evaluation(models.Model):
-    evaluation_id = models.AutoField(primary_key=True)
-    overall_score = models.DecimalField(
-        max_digits=5,
-        decimal_places=2,
-        blank=True,
-        null=True,
-    )
-    employee = models.ForeignKey(
-        Employee,
-        on_delete=models.PROTECT,
-        db_column='employee_id',
-        related_name='evaluations',
-    )
-    goal = models.ForeignKey(
-        Goal,
-        on_delete=models.SET_NULL,
-        db_column='goal_id',
-        related_name='evaluations',
-        blank=True,
-        null=True,
-    )
-    # One evaluation per employee per year; frozen (is_final) once the year ends.
-    evaluation_year = models.PositiveSmallIntegerField(blank=True, null=True)
-    is_final = models.BooleanField(default=False)
-
-    class Meta:
-        db_table = 'evaluation'
-        constraints = [
-            models.UniqueConstraint(
-                fields=['employee', 'evaluation_year'],
-                name='one_evaluation_per_employee_per_year',
-            ),
-        ]
 
 
 class PredictionFactor(models.Model):

@@ -42,6 +42,13 @@ export default function Dashboard({ role }) {
   const [isError, setIsError] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
 
+  // A success message pops up and goes away by itself; errors stay until the next action.
+  useEffect(() => {
+    if (!message || isError) return undefined;
+    const timer = setTimeout(() => setMessage(''), 4500);
+    return () => clearTimeout(timer);
+  }, [message, isError]);
+
   useEffect(() => {
     const savedLogin = getLogin();
     if (!savedLogin) {
@@ -124,12 +131,17 @@ export default function Dashboard({ role }) {
         invitations: result,
         pending_invitation_ids: result.remaining_ids,
       };
-      setBatch(updatedBatch);
-      sessionStorage.setItem(BATCH_KEY, JSON.stringify(updatedBatch));
       setMessage(result.message);
       setIsError(result.errors.length > 0);
-      if (result.remaining === 0) {
+      if (result.remaining === 0 && result.errors.length === 0) {
+        // Everyone was invited: the summary is done, so it leaves the page.
+        setBatch(null);
+        sessionStorage.removeItem(BATCH_KEY);
         window.history.replaceState(null, '', '/dashboard/hr?invitations=sent');
+        await loadEmployees();
+      } else {
+        setBatch(updatedBatch);
+        sessionStorage.setItem(BATCH_KEY, JSON.stringify(updatedBatch));
       }
     } catch (error) {
       setIsError(true);
@@ -153,15 +165,19 @@ export default function Dashboard({ role }) {
   const managerCount = employees.filter((employee) => employee.role === 'Manager').length;
   const employeeCount = employees.filter((employee) => employee.role === 'Employee').length;
   const hrCount = employees.filter((employee) => employee.role === 'HR').length;
+  const waiting = employees.filter((employee) => employee.invitation_pending).sort((a, b) => b.id - a.id);
+  const active = employees.filter((employee) => !employee.invitation_pending);
   const invitationsPending = batch?.invitations?.remaining ?? batch?.summary?.total_added ?? 0;
 
   return (
     <Shell role={role} title={role === 'HR' ? 'HR Dashboard' : `${role} Dashboard`} subtitle={`Welcome back, ${displayName(login.user)}`}>
       <div className="dashboard dashboard-in-shell">
       {message && (
-        <div className={`status-banner${isError ? ' error' : ''}`} role="status">
-          <span aria-hidden="true">{isError ? '!' : '✓'}</span>
-          <span>{message}</span>
+        <div className={isError ? undefined : 'status-toast'}>
+          <div className={`status-banner${isError ? ' error' : ''}`} role="status">
+            <span aria-hidden="true">{isError ? '!' : '✓'}</span>
+            <span>{message}</span>
+          </div>
         </div>
       )}
 
@@ -170,6 +186,21 @@ export default function Dashboard({ role }) {
         <div className="dashboard-main">
           {role === 'HR' && (
             <>
+              {waiting.length > 0 && (
+                <section className="dashboard-panel" id="waiting">
+                  <div className="dashboard-toolbar">
+                    <div>
+                      <h2>Newly added</h2>
+                      <p className="description">
+                        {waiting.length} {waiting.length === 1 ? 'person has' : 'people have'} not set a password yet.
+                        They move to the list below once they do.
+                      </p>
+                    </div>
+                  </div>
+                  <EmployeeTable employees={waiting} />
+                </section>
+              )}
+
               <section className="dashboard-panel" id="import">
                 <div className="dashboard-toolbar">
                   <div>
@@ -205,7 +236,6 @@ export default function Dashboard({ role }) {
                         {batch.invitations?.remaining === 0 ? 'Invitations sent' : 'Ready to invite'}
                       </span>
                     </div>
-                    <p className="description">{batch.status}</p>
                     <div className="summary-grid">
                       <div><strong>{batch.summary.employees_added}</strong><span>Employees added</span></div>
                       <div><strong>{batch.summary.managers_added}</strong><span>Managers added</span></div>
@@ -267,7 +297,7 @@ export default function Dashboard({ role }) {
                     <p className="description">Employee information is scoped to your organization.</p>
                   </div>
                 </div>
-                <EmployeeTable employees={employees} />
+                <EmployeeTable employees={active} />
               </section>
             </>
           )}
