@@ -153,7 +153,7 @@ function TasksContent() {
 
       {projects.length > 0 && (
         <section className="ws-card ws-side-card">
-          <div className="ws-card-head"><h3>Projects you can view</h3></div>
+          <div className="ws-card-head"><h3>Projects</h3></div>
           <ul className="ws-member-list">
             {projects.map((project) => (
               <li key={project.id} className="ws-member-row">

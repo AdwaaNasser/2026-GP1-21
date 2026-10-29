@@ -364,13 +364,32 @@ export function Modal(props) {
 }
 // Styled "are you sure?" dialog. Rendered in document.body so it always sits
 // above any open drawer.
-export function ConfirmDialog({ title, message, confirmLabel = 'Delete', busy = false, onConfirm, onCancel }) {
+//  - danger=false gives a normal (blue) confirm button, for warnings that are not deletions.
+//  - children are shown under the message (e.g. the list of linked goals).
+//  - error is shown inside the dialog, so a failed request keeps it open.
+//  - while busy, both buttons are disabled and the dialog cannot be closed.
+const noop = () => {};
+
+export function ConfirmDialog({
+  title,
+  message,
+  confirmLabel = 'Delete',
+  busyLabel = 'Please wait…',
+  danger = true,
+  busy = false,
+  error = '',
+  children,
+  onConfirm,
+  onCancel,
+}) {
   return createPortal(
-    <Modal title={title} onClose={onCancel}>
+    <Modal title={title} onClose={busy ? noop : onCancel}>
+      {error && <div className="ws-form-error" role="alert">{error}</div>}
       <p className="ws-description">{message}</p>
+      {children}
       <div className="ws-form-actions">
-        <button className="ws-btn ws-btn-danger" type="button" disabled={busy} onClick={onConfirm}>
-          {confirmLabel}
+        <button className={`ws-btn ${danger ? 'ws-btn-danger' : 'ws-btn-primary'}`} type="button" disabled={busy} onClick={onConfirm}>
+          {busy ? busyLabel : confirmLabel}
         </button>
         <button className="ws-btn ws-btn-secondary" type="button" disabled={busy} onClick={onCancel}>
           Cancel
@@ -379,6 +398,25 @@ export function ConfirmDialog({ title, message, confirmLabel = 'Delete', busy = 
     </Modal>,
     document.body,
   );
+}
+
+// The goals (KPIs) a task counts toward, as sent by the API in task.linked_goals.
+export function LinkedGoalList({ goals }) {
+  if (!goals || goals.length === 0) return null;
+  return (
+    <ul className="ws-description">
+      {goals.map((goal) => (
+        <li key={goal.id}>
+          <Icon name="flag" size={13} /> {goal.name}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// "a goal" / "2 goals"
+function goalCount(goals) {
+  return goals.length === 1 ? 'a goal' : `${goals.length} goals`;
 }
 
 // Row of tabs with a count: tabs = [[key, label, count], ...]
@@ -722,13 +760,24 @@ export function TaskPanel({ task, role, onEdit, onAdvance, onReview, onDelete, p
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [confirmingEdit, setConfirmingEdit] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const inFlight = useRef(false); // blocks a second click before React re-renders
+
+  // Goals this task counts toward (sent to managers only), and whether it can be edited.
+  // can_edit is false once the task is 'completed'; the status check is a fallback.
+  const linkedGoals = task.linked_goals || [];
+  const canEdit = task.can_edit ?? task.status !== 'completed';
 
   useEffect(() => {
     setFeedback('');
     setError('');
+    setConfirmingEdit(false);
   }, [task.id, task.status]);
 
   async function run(action) {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
     setError('');
     try {
@@ -736,8 +785,37 @@ export function TaskPanel({ task, role, onEdit, onAdvance, onReview, onDelete, p
     } catch (failure) {
       setError(failure.message || 'Something went wrong. Please try again.');
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
+  }
+
+  // Edit: a task linked to goals shows an informational warning first.
+  function startEdit() {
+    if (linkedGoals.length > 0) setConfirmingEdit(true);
+    else onEdit();
+  }
+
+  // Delete: the dialog stays open (buttons disabled) until the server answers.
+  // On success the page closes the panel; on failure the error shows in the dialog.
+  async function confirmDelete() {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setBusy(true);
+    setDeleteError('');
+    try {
+      await onDelete(task);
+    } catch (failure) {
+      setDeleteError(failure.message || 'The task could not be deleted. Please try again.');
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
+  }
+
+  function cancelDelete() {
+    setConfirmingDelete(false);
+    setDeleteError('');
   }
 
   function requestChanges() {
@@ -831,44 +909,66 @@ export function TaskPanel({ task, role, onEdit, onAdvance, onReview, onDelete, p
         </div>
       )}
 
-            {role === 'Manager' && (onEdit || onDelete) && (
+      {role === 'Manager' && ((onEdit && canEdit) || onDelete) && (
         <div className="ws-panel-footer">
-          {onEdit && (
+          {onEdit && canEdit && (
             <button
               type="button"
               className="ws-btn ws-btn-secondary"
-              onClick={onEdit}
+              disabled={busy}
+              onClick={startEdit}
             >
               Edit task
             </button>
           )}
 
           {onDelete && (
-           <button
-  type="button"
-  className="ws-btn ws-btn-outline-danger"
-  disabled={busy}
-  onClick={() => setConfirmingDelete(true)}
->
-  Delete task
-</button>
+            <button
+              type="button"
+              className="ws-btn ws-btn-outline-danger"
+              disabled={busy}
+              onClick={() => setConfirmingDelete(true)}
+            >
+              Delete task
+            </button>
           )}
         </div>
       )}
 
-{confirmingDelete && (
-  <ConfirmDialog
-    title="Delete task"
-    message={`Delete "${task.title}"? This cannot be undone.`}
-    busy={busy}
-    onCancel={() => setConfirmingDelete(false)}
-    onConfirm={() => {
-      setConfirmingDelete(false);
-      run(() => onDelete(task));
-    }}
-  />
-)}
+      {confirmingEdit && (
+        <ConfirmDialog
+          title="This task is linked to goals"
+          message={`"${task.title}" counts toward ${goalCount(linkedGoals)}. Changing it (for example its due date) can change the progress and rating of ${linkedGoals.length === 1 ? 'that goal' : 'those goals'}.`}
+          confirmLabel="Continue editing"
+          danger={false}
+          onCancel={() => setConfirmingEdit(false)}
+          onConfirm={() => {
+            setConfirmingEdit(false);
+            onEdit();
+          }}
+        >
+          <LinkedGoalList goals={linkedGoals} />
+        </ConfirmDialog>
+      )}
 
+      {confirmingDelete && (
+        <ConfirmDialog
+          title={linkedGoals.length ? 'Delete a task linked to goals?' : 'Delete task'}
+          message={
+            linkedGoals.length
+              ? `"${task.title}" counts toward ${goalCount(linkedGoals)}. Deleting it removes it from ${linkedGoals.length === 1 ? 'that goal' : 'those goals'}, which may lower their progress and rating. This cannot be undone.`
+              : `Delete "${task.title}"? This cannot be undone.`
+          }
+          confirmLabel="Delete task"
+          busyLabel="Deleting…"
+          busy={busy}
+          error={deleteError}
+          onCancel={cancelDelete}
+          onConfirm={confirmDelete}
+        >
+          <LinkedGoalList goals={linkedGoals} />
+        </ConfirmDialog>
+      )}
     </div>
   );
 }

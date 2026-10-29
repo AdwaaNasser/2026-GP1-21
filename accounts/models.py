@@ -172,7 +172,9 @@ class Project(models.Model):
         db_column='manager_id',
         related_name='projects',
     )
-
+        # Set automatically when a project is created. Projects created before this
+    # field existed have no date (null) and show "—" in the projects table.
+    created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
     class Meta:
         db_table = 'project'
 

@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 from types import SimpleNamespace
 
 from django.test import SimpleTestCase, override_settings
@@ -6,7 +7,9 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from accounts.models import Employee, Manager, Organization, Project, Task, User
+from accounts.models import (
+    Employee, Goal, Manager, Organization, Project, Task, TaskGoal, User,
+)
 
 from .permissions import PRIVATE, PUBLIC
 from .views import employee_can_set_status, progress_of, review_error, task_data
@@ -75,6 +78,20 @@ class TaskDataTests(SimpleTestCase):
         self.assertTrue(task_data(submitted, manager)['can_review'])
         self.assertFalse(task_data(submitted, employee)['can_review'])
         self.assertFalse(task_data(self.make_task(status='todo'), manager)['can_review'])
+
+    def test_completed_tasks_cannot_be_edited(self):
+        manager = SimpleNamespace(pk=9, role='Manager')
+        employee = SimpleNamespace(pk=5, role='Employee')
+        for current in ('todo', 'in_progress', 'in_review', 'changes_requested'):
+            self.assertTrue(task_data(self.make_task(status=current), manager)['can_edit'], current)
+        self.assertFalse(task_data(self.make_task(status='completed'), manager)['can_edit'])
+        self.assertFalse(task_data(self.make_task(), employee)['can_edit'])
+
+    def test_linked_goals_default_to_empty(self):
+        manager = SimpleNamespace(pk=9, role='Manager')
+        self.assertEqual(task_data(self.make_task(), manager)['linked_goals'], [])
+
+
 class EmployeeStatusTests(SimpleTestCase):
     def test_employee_moves_one_step_forward_and_submits_for_review(self):
         self.assertTrue(employee_can_set_status('todo', 'in_progress'))
@@ -505,6 +522,8 @@ class ProjectTests(WorkspaceApiTestCase):
         project = Project.objects.get(pk=response.data['id'])
         self.assertEqual(project.title, 'Fresh')
         self.assertEqual(project.manager_id, self.manager1.pk)
+        self.assertIsNotNone(project.created_at)  # set automatically
+        self.assertIsNotNone(response.data['created_at'])  # and sent to the projects table
         response = self.client.patch(self.project_url(project), {'name': 'Fresher'}, format='json')
         self.assertEqual(response.status_code, 200)
         project.refresh_from_db()
@@ -552,3 +571,77 @@ class ProjectMembersTests(WorkspaceApiTestCase):
             format='json',
         )
         self.assertEqual(response.status_code, 405)
+
+
+class GoalLinkedTaskTests(WorkspaceApiTestCase):
+    """Edit/delete of tasks and projects when tasks count toward goals (KPIs)."""
+
+    def setUp(self):
+        year = timezone.localdate().year
+        Task.objects.filter(pk=self.pub1.pk).update(status='completed', due_date=date(year, 6, 1))
+        self.goal = Goal.objects.create(
+            name='Deliver features', type='Task-based', time_period='annual',
+            weight=Decimal('100'), target_value=Decimal('1'), evaluation_year=year,
+            manager=self.manager1.manager_record, employee=self.emp1.employee_record,
+        )
+        TaskGoal.objects.create(task=self.pub1, goal=self.goal)
+        Goal.objects.filter(pk=self.goal.pk).update(overall_score=Decimal('4.00'))  # 1 of 1 done
+
+    def test_manager_sees_the_goals_a_task_counts_toward(self):
+        self.login(self.manager1)
+        rows = {row['id']: row for row in self.client.get(reverse('task-list')).data}
+        self.assertEqual(
+            rows[self.pub1.pk]['linked_goals'],
+            [{'id': self.goal.pk, 'name': 'Deliver features'}],
+        )
+        self.assertEqual(rows[self.priv1.pk]['linked_goals'], [])
+        detail = self.client.get(self.project_url(self.website)).data
+        in_project = {row['id']: row for row in detail['tasks']}
+        self.assertEqual(len(in_project[self.pub1.pk]['linked_goals']), 1)
+
+    def test_employees_do_not_see_goal_links(self):
+        for user in (self.emp1, self.emp2):  # the assignee, and a colleague seeing a public task
+            self.login(user)
+            data = self.client.get(self.task_url(self.pub1)).data
+            self.assertEqual(data['linked_goals'], [])
+
+    def test_completed_task_cannot_be_edited_but_can_still_be_deleted(self):
+        self.login(self.manager1)
+        url = self.task_url(self.pub1)
+        self.assertFalse(self.client.get(url).data['can_edit'])
+        response = self.client.patch(url, {'title': 'Changed'}, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.pub1.refresh_from_db()
+        self.assertEqual(self.pub1.title, 'pub1')
+        self.assertTrue(self.client.get(self.task_url(self.priv1)).data['can_edit'])
+
+    def test_deleting_a_linked_task_keeps_the_goal_and_refreshes_its_score(self):
+        self.login(self.manager1)
+        response = self.client.delete(self.task_url(self.pub1))
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(Task.objects.filter(pk=self.pub1.pk).exists())
+        self.assertFalse(TaskGoal.objects.filter(goal=self.goal).exists())
+        self.goal.refresh_from_db()  # the goal itself stays
+        self.assertEqual(self.goal.overall_score, Decimal('1.00'))  # 0 of 1 done -> rating 1
+
+    def test_project_detail_reports_how_many_tasks_would_be_deleted(self):
+        self.login(self.manager1)
+        progress = self.client.get(self.project_url(self.website)).data['progress']
+        self.assertEqual(progress['total_tasks'], 5)
+
+    def test_deleting_a_project_deletes_its_tasks_and_refreshes_goal_scores(self):
+        self.login(self.manager1)
+        response = self.client.delete(self.project_url(self.website))
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(Project.objects.filter(pk=self.website.pk).exists())
+        self.assertFalse(Task.objects.filter(project_id=self.website.pk).exists())
+        self.assertTrue(Task.objects.filter(pk=self.other.pk).exists())  # other projects untouched
+        self.goal.refresh_from_db()
+        self.assertEqual(self.goal.overall_score, Decimal('1.00'))
+
+    def test_only_the_owning_manager_can_delete_a_project(self):
+        self.login(self.manager2)
+        self.assertEqual(self.client.delete(self.project_url(self.website)).status_code, 404)
+        self.login(self.emp1)
+        self.assertEqual(self.client.delete(self.project_url(self.website)).status_code, 403)
+        self.assertEqual(Task.objects.filter(project=self.website).count(), 5)

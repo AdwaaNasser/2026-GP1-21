@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { displayName } from './api.js';
 import Shell, { Banner, HeaderActions } from './Shell.jsx';
 import {
@@ -35,6 +35,9 @@ function DetailsContent({ role }) {
   const [panel, setPanel] = useState(null);
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const deleteInFlight = useRef(false); // blocks a second DELETE from repeated clicks
 
   async function loadProject() {
     try {
@@ -59,15 +62,28 @@ function DetailsContent({ role }) {
     loadProject();
   }
 
+  // Runs only after the manager confirms in the dialog. The dialog stays open
+  // (buttons disabled) until the server answers; a failure is shown inside it
+  // and nothing is deleted.
   async function deleteProject() {
-  setConfirmingDelete(false);
-  try {
-    await deleteRequest(`/api/workspace/projects/${projectId}/`);
-    window.location.assign('/manager/projects');
-  } catch (error) {
-    failure(error);
+    if (deleteInFlight.current) return;
+    deleteInFlight.current = true;
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      await deleteRequest(`/api/workspace/projects/${projectId}/`);
+      window.location.assign('/manager/projects');
+    } catch (error) {
+      setDeleteError(error.message || 'The project could not be deleted. Please try again.');
+      deleteInFlight.current = false;
+      setDeleting(false);
+    }
   }
-}
+
+  function cancelDeleteProject() {
+    setConfirmingDelete(false);
+    setDeleteError('');
+  }
 
   const backPath = isManager ? '/manager/projects' : '/employee/tasks';
 
@@ -102,6 +118,11 @@ function DetailsContent({ role }) {
   ).length;
 
   const overdueCount = tasks.filter((task) => isOverdue(task)).length;
+
+  // For the delete warning. A manager's project response lists every task,
+  // so this is the number of tasks the DELETE will remove.
+  const taskCount = project.progress?.total_tasks ?? tasks.length;
+  const linkedTaskCount = tasks.filter((task) => (task.linked_goals || []).length > 0).length;
 
   const taskStats = [
     { label: 'Tasks', value: tasks.length },
@@ -140,6 +161,7 @@ function DetailsContent({ role }) {
 <button
   className="ws-btn ws-btn-outline-danger"
   type="button"
+  disabled={deleting}
   onClick={() => setConfirmingDelete(true)}
 >
   <Icon name="x" size={15} />
@@ -265,19 +287,22 @@ function DetailsContent({ role }) {
           />
         </Modal>
       )}
-    {isManager && confirmingDelete && (
-  <ConfirmDialog
-    title="Delete project"
-    message={
-      tasks.length
-        ? `Delete "${project.name}" and its ${tasks.length} task${tasks.length === 1 ? '' : 's'}? This cannot be undone.`
-        : `Delete "${project.name}"? This cannot be undone.`
-    }
-    confirmLabel="Delete project"
-    onCancel={() => setConfirmingDelete(false)}
-    onConfirm={deleteProject}
-  />
-)}
+      {isManager && confirmingDelete && (
+        <ConfirmDialog
+          title={taskCount ? 'Delete this project and its tasks?' : 'Delete project'}
+          message={
+            taskCount
+              ? `"${project.name}" has ${taskCount} task${taskCount === 1 ? '' : 's'}. Deleting the project will also permanently delete ${taskCount === 1 ? 'it' : 'all of them'}.${linkedTaskCount ? ` ${linkedTaskCount} of these tasks count toward employee goals, so those goals may lose progress.` : ''} This cannot be undone.`
+              : `Delete "${project.name}"? This cannot be undone.`
+          }
+          confirmLabel="Delete project"
+          busyLabel="Deleting…"
+          busy={deleting}
+          error={deleteError}
+          onCancel={cancelDeleteProject}
+          onConfirm={deleteProject}
+        />
+      )}
 
 
 
@@ -299,4 +324,3 @@ export default function ProjectDetails({ role }) {
     </Shell>
   );
 }
-

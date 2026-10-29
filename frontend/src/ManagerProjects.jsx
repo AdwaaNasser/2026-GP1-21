@@ -84,7 +84,7 @@ function ProjectsContent() {
         <div className="ws-card ws-table-card">
           <table className="ws-table">
             <thead>
-              <tr><th>Project</th><th>Progress</th><th>Created</th><th aria-label="Open" /></tr>
+              <tr><th>Project Name</th><th>Progress</th><th>Created</th><th aria-label="Open" /></tr>
             </thead>
             <tbody>
               {shown.map((project) => (

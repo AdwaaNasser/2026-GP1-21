@@ -4,10 +4,12 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.db import transaction
-from accounts.models import Project, Task, User
+from accounts.models import Project, Task, TaskGoal, User
 
 from .permissions import PUBLIC, IsManagerOrEmployee, is_employee, is_manager
 from .serializers import ProjectWriteSerializer, TaskWriteSerializer
+
+COMPLETED = 'completed'  # Task.status once the manager approves it (same as goals.rules.DONE_STATUS)
 
 NEXT_STATUS = {
     'todo': 'in_progress',
@@ -48,6 +50,43 @@ def only_managers():
     )
 
 
+# ---------- Goals (KPIs) linked to tasks ----------
+#
+# A task counts toward a goal through TaskGoal (task.goal_records). Deleting a
+# task cascades to those rows, so the frontend needs to know about the links
+# before it deletes or edits, and the goal scores must be recalculated after.
+
+def linked_goals(task):
+    """The goals this task counts toward, as [{'id', 'name'}].
+
+    Reads the prefetched goal_records (see tasks_for), so a task list does
+    not run one query per task.
+    """
+    records = getattr(task, 'goal_records', None)
+    if records is None:
+        return []
+    return [{'id': record.goal_id, 'name': record.goal.name} for record in records.all()]
+
+
+def goal_owners(task_goal_records):
+    """(employee_id, evaluation_year) of every goal touched by these links."""
+    return {
+        (employee_id, year)
+        for employee_id, year in task_goal_records.values_list(
+            'goal__employee_id', 'goal__evaluation_year'
+        )
+        if employee_id is not None and year is not None
+    }
+
+
+def refresh_goal_scores(owners):
+    """Recalculate the stored overall score after linked tasks were deleted."""
+    from goals.services import refresh_overall_score  # imported here to avoid an import cycle
+
+    for employee_id, year in owners:
+        refresh_overall_score(employee_id, year)
+
+
 # ---------- Who can see what (the visibility rules live here) ----------
 #
 # Manager:  every task of their own projects, public or private.
@@ -70,7 +109,10 @@ def projects_for(user):
 
 
 def tasks_for(user):
-    tasks = Task.objects.select_related('project__manager__user', 'employee__user')
+    tasks = (
+        Task.objects.select_related('project__manager__user', 'employee__user')
+        .prefetch_related('goal_records__goal')
+    )
     if is_manager(user):
         return tasks.filter(
             Q(project__manager_id=user.pk)
@@ -91,6 +133,7 @@ def in_display_order(tasks):
 # ---------- Turning models into JSON ----------
 
 def task_data(task, user):
+    is_manager_view = user.role == 'Manager'
     return {
         'id': task.pk,
         'title': task.title,
@@ -113,7 +156,13 @@ def task_data(task, user):
         'is_mine': task.employee_id == user.pk,
         'status': task.status,
         'next_status': NEXT_STATUS.get(task.status) if task.employee_id == user.pk else None,
-        'can_review': user.role == 'Manager' and task.status == 'in_review',
+        'can_review': is_manager_view and task.status == 'in_review',
+        # Only managers edit tasks, and a completed task can no longer be edited.
+        'can_edit': is_manager_view and task.status != COMPLETED,
+        # Goals this task counts toward, so the UI can warn before editing or
+        # deleting it. Managers only: an employee may see a colleague's public
+        # task, but not that colleague's KPIs.
+        'linked_goals': linked_goals(task) if is_manager_view else [],
     }
 
 
@@ -123,6 +172,7 @@ def project_data(project, user, with_tasks=False):
         'id': project.pk,
         'name': project.title,
         'description': project.description,
+        'created_at': project.created_at,
         'manager': {
             'first_name': project.manager.user.first_name or '',
             'last_name': project.manager.user.last_name or '',
@@ -186,10 +236,13 @@ class ProjectDetailView(APIView):
         project = self.get_project(request, project_id) 
         if project is None:
             return not_found('Project not found.')
+        # Task.project is PROTECT, so the tasks are deleted first, in the same
+        # transaction. Their task_goal and task_skills rows go with them (CASCADE).
         with transaction.atomic():
-           
+            owners = goal_owners(TaskGoal.objects.filter(task__project=project))
             Task.objects.filter(project=project).delete()
             project.delete()
+            refresh_goal_scores(owners)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 class ProjectMembersView(APIView):
@@ -267,6 +320,11 @@ class TaskDetailView(APIView):
         if is_manager(request.user):
             if 'status' in request.data:
                 return self.review(request, task)
+            if task.status == COMPLETED:
+                return Response(
+                    {'detail': 'Completed tasks can no longer be edited.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             serializer = TaskWriteSerializer(
                 task, data=request.data, partial=True, context={'request': request}
             )
@@ -330,6 +388,10 @@ class TaskDetailView(APIView):
         task = self.get_task(request, task_id)
         if task is None:
             return not_found('Task not found.')
-        task.delete()
+        # Deleting the task removes its task_goal links (CASCADE), which changes
+        # the progress of Task-based goals, so their scores are recalculated.
+        with transaction.atomic():
+            owners = goal_owners(TaskGoal.objects.filter(task=task))
+            task.delete()
+            refresh_goal_scores(owners)
         return Response(status=status.HTTP_204_NO_CONTENT)
-
