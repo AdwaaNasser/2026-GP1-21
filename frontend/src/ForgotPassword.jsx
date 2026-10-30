@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import AuthAside from './AuthAside.jsx';
 import { responseData } from './api.js';
 
 export default function ForgotPassword() {
@@ -30,12 +31,9 @@ export default function ForgotPassword() {
 
   return (
     <main className="auth-page">
-      <a className="brand auth-brand" href="/" aria-label="Bayyinah home">
-        <img className="brand-logo" src="/bayyinah-logo.png" alt="" />
-        <span>Bayyinah <span className="brand-arabic">بينة</span></span>
-      </a>
+      <AuthAside />
       <section className="auth-card">
-        <span className="auth-kicker">ACCOUNT RECOVERY</span>
+        <span className="auth-kicker">Account recovery</span>
         <h1>Forgot your password?</h1>
         <p className="auth-description">
           Enter the email address associated with your account. If it is registered,

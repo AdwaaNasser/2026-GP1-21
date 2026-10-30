@@ -91,7 +91,7 @@ function PersonForm({ person, departments, managers, onSubmit, onCancel }) {
         isEdit ? shared : { ...shared, email: form.email.trim(), role: form.role },
       );
     } catch (failure) {
-      setError(failure.message || 'The person could not be saved.');
+      setError(failure.message || 'The employee could not be saved.');
       setSaving(false);
     }
   }
@@ -180,12 +180,12 @@ function PersonForm({ person, departments, managers, onSubmit, onCancel }) {
       )}
 
       {!isEdit && (
-        <p className="ws-hint">An invitation email is sent so the new person can set their own password.</p>
+        <p className="ws-hint">An invitation email is sent so the new employee can set their own password.</p>
       )}
 
       <div className="ws-form-actions">
         <button className="ws-btn ws-btn-primary" type="submit" disabled={saving}>
-          {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Add person'}
+          {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Add employee'}
         </button>
         <button className="ws-btn ws-btn-secondary" type="button" onClick={onCancel} disabled={saving}>Cancel</button>
       </div>
@@ -334,10 +334,10 @@ function CsvImport({ onImported, success, failure }) {
 function PeopleTable({ list, onEdit, onInvite }) {
   return (
     <div className="ws-table-card">
-      <table className="ws-table">
+      <table className="ws-table hr-people">
         <thead>
           <tr>
-            <th>Name</th><th>Role</th><th>Job title</th><th>Direct manager</th><th>Gender</th><th>Department</th><th>Hired</th><th>Absence days</th><th>Status</th><th aria-label="Actions" />
+            <th>Name</th><th>Role</th><th>Job title</th><th>Manager</th><th>Gender</th><th>Department</th><th>Hired</th><th>Leave days</th><th>Status</th><th aria-label="Actions" />
           </tr>
         </thead>
         <tbody>
@@ -345,7 +345,7 @@ function PeopleTable({ list, onEdit, onInvite }) {
             <tr key={person.id}>
               <td>
                 <div className="hr-person">
-                  <Avatar person={person} size={28} />
+                  <Avatar name={displayName(person)} size={30} />
                   <div>
                     <div className="ws-task-title">{displayName(person)}</div>
                     <div className="ws-task-sub">{person.email}</div>
@@ -415,7 +415,7 @@ function TeamContent() {
   async function addPerson(body) {
     const result = await sendJson('/api/accounts/team-invite/', 'POST', body);
     setAdding(false);
-    success(result.message || 'Person added.');
+    success(result.message || 'Employee added.');
     load();
   }
 
@@ -457,9 +457,7 @@ function TeamContent() {
 
   return (
     <>
-      <div className={banner.isError ? undefined : 'gl-toast'}>
-        <Banner message={banner.message} isError={banner.isError} onClose={clear} />
-      </div>
+      <Banner message={banner.message} isError={banner.isError} onClose={clear} />
 
       {waiting.length > 0 && (
         <section className="ws-card ws-side-card" id="waiting">
@@ -467,7 +465,7 @@ function TeamContent() {
             <div>
               <h3>Newly added</h3>
               <p>
-                {waiting.length} {waiting.length === 1 ? 'person has' : 'people have'} not set a password yet.
+                {waiting.length} {waiting.length === 1 ? 'employee has' : 'employees have'} not set a password yet.
                 They move to the list below once they do.
               </p>
             </div>
@@ -476,12 +474,10 @@ function TeamContent() {
         </section>
       )}
 
-      <CsvImport onImported={load} success={success} failure={failure} />
-
       <section className="ws-card ws-side-card" id="people">
         <div className="ws-card-head ws-card-head-actions">
           <div>
-            <h3>People in your organization</h3>
+            <h3>Employees in your organization</h3>
             <p>{people === null ? 'Loading…' : `${active.length} ${active.length === 1 ? 'person' : 'people'}`}</p>
           </div>
           <div className="ws-card-tools">
@@ -489,15 +485,16 @@ function TeamContent() {
               <Icon name="search" size={15} />
               <input
                 type="search"
-                placeholder="Search people"
+                placeholder="Search employees"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                aria-label="Search people"
+                aria-label="Search employees"
               />
             </label>
+            <a className="ws-btn ws-btn-secondary" href="#import">Import CSV</a>
             <button className="ws-btn ws-btn-primary" type="button" onClick={() => setAdding(true)}>
               <Icon name="plus" size={15} />
-              Add person
+              Add employee
             </button>
           </div>
         </div>
@@ -506,7 +503,7 @@ function TeamContent() {
           <TableSkeleton />
         ) : active.length === 0 ? (
           <EmptyState icon="users" title="No one has set up an account yet">
-            {waiting.length > 0 ? 'People appear here after they set their password.' : 'Add your first person, or import a CSV file.'}
+            {waiting.length > 0 ? 'Employees appear here after they set their password.' : 'Add your first employee, or import a CSV file.'}
           </EmptyState>
         ) : shown.length === 0 ? (
           <EmptyState icon="search" title="No one matches your search">
@@ -517,8 +514,10 @@ function TeamContent() {
         )}
       </section>
 
+      <CsvImport onImported={load} success={success} failure={failure} />
+
       {adding && (
-        <Modal title="Add person" onClose={() => setAdding(false)}>
+        <Modal title="Add employee" onClose={() => setAdding(false)}>
           <PersonForm departments={departments} managers={managers} onSubmit={addPerson} onCancel={() => setAdding(false)} />
         </Modal>
       )}
@@ -535,8 +534,8 @@ export default function HrTeam() {
   return (
     <Shell
       role="HR"
-      title="Import team"
-      subtitle="Bring in your team from a CSV file, add people one by one, and keep their details up to date."
+      title="Employees"
+      subtitle="Add people, import a CSV file, and keep job titles, departments and direct managers up to date."
     >
       <TeamContent />
     </Shell>

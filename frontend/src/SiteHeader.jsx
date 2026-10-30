@@ -12,7 +12,7 @@ export default function SiteHeader() {
       <header className="site-header">
         <a className="brand" href="/" aria-label="Bayyinah home">
           <img className="brand-logo" src="/bayyinah-logo.png" alt="" />
-          <span>Bayyinah <span className="brand-arabic">بينة</span></span>
+          <span className="brand-word"><span className="brand-latin">Bayyinah</span><span className="brand-arabic" lang="ar" dir="rtl">بيّنة</span></span>
         </a>
         <nav className="site-nav" aria-label="Main navigation">
           {LINKS.map(([href, text]) => <a key={href} className="nav-login mk-link" href={href}>{text}</a>)}

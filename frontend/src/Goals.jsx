@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Shell, { Banner } from './Shell.jsx';
 import { displayName } from './api.js';
 import { LineChart, Meter } from './GoalCharts.jsx';
+import YearPicker from './YearPicker.jsx';
 import {
   Avatar,
   EmptyState,
@@ -61,14 +62,7 @@ function number(value) {
 }
 
 function YearSelect({ year, onChange }) {
-  return (
-    <label className="ws-sort">
-      Evaluation year
-      <select className="ws-select ws-select-sm" value={year} onChange={(event) => onChange(Number(event.target.value))}>
-        {YEARS.map((value) => <option key={value} value={value}>{value}</option>)}
-      </select>
-    </label>
-  );
+  return <YearPicker year={year} years={YEARS} onChange={onChange} />;
 }
 
 function Rating({ value }) {
@@ -104,6 +98,43 @@ function Delta({ current, previous, previousYear }) {
 }
 
 // Top of every performance screen: the score, and how it has moved over the years.
+// Five notches, one for each rating point: the ring fills to score / 5.
+function ScoreRing({ score }) {
+  const size = 176;
+  const radius = 74;
+  const length = 2 * Math.PI * radius;
+  const fill = Math.max(0, Math.min(score / 5, 1));
+  const notches = [0, 1, 2, 3, 4].map((i) => {
+    const angle = (i / 5) * 2 * Math.PI - Math.PI / 2;
+    return {
+      x1: size / 2 + (radius - 9) * Math.cos(angle),
+      y1: size / 2 + (radius - 9) * Math.sin(angle),
+      x2: size / 2 + (radius + 9) * Math.cos(angle),
+      y2: size / 2 + (radius + 9) * Math.sin(angle),
+    };
+  });
+  return (
+    <div className="gl-ring" role="img" aria-label={`Score ${score.toFixed(2)} out of 5`}>
+      <svg viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
+        <circle className="gl-ring-track" cx={size / 2} cy={size / 2} r={radius} />
+        <circle
+          className="gl-ring-value"
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          style={{ '--len': length, '--off': length * (1 - fill) }}
+        />
+        {notches.map((n, i) => <line key={i} className="gl-ring-notch" {...n} />)}
+      </svg>
+      <div className="gl-ring-label">
+        <strong>{score.toFixed(2)}</strong>
+        <span>out of 5</span>
+      </div>
+    </div>
+  );
+}
+
 function Hero({ title, score, final, summary, delta, history, subject, chart, compact = false }) {
   return (
     <section className={`gl-hero${compact ? ' gl-hero-compact' : ''}${!chart && !history ? ' gl-hero-solo' : ''}`}>
@@ -112,10 +143,7 @@ function Hero({ title, score, final, summary, delta, history, subject, chart, co
         {score === null || score === undefined ? (
           <div className="gl-hero-score gl-hero-score-empty"><strong>No score yet</strong></div>
         ) : (
-          <div className="gl-hero-score" aria-label={`Score ${score.toFixed(2)} out of 5`}>
-            <strong>{score.toFixed(2)}</strong>
-            <span>/ 5</span>
-          </div>
+          <ScoreRing score={score} />
         )}
         {delta}
         <p className="gl-hero-summary">{summary}</p>
@@ -246,6 +274,8 @@ function PerformanceContent() {
             final={data.is_final}
             summary={goalSummary(data)}
             delta={compare && <Delta current={data.overall_score} previous={compare.previous_score} previousYear={compare.previous_year} />}
+            history={compare ? compare.history : undefined}
+            subject="Your score by year"
           />
           {data.goals.length === 0 ? (
             <div className="gl-panel">
@@ -276,7 +306,7 @@ export function EmployeePerformance() {
 
 // ---------- Manager: team and goal editor ----------
 
-const PALETTE = ['#ec6a1a', '#4a4542', '#e3a72f', '#2f9e8f', '#c2557a'];
+const PALETTE = ['#F07B1F', '#4B3A75', '#3B6FD9', '#2E9E6A', '#9C8FBF'];
 
 const EMPTY_GOAL = {
   id: null, name: '', description: '', type: 'Task-based', period: 'annual', target: '', weight: '',
@@ -688,13 +718,10 @@ function TeamHero({ team, year }) {
         {average === null ? (
           <div className="gl-hero-score gl-hero-score-empty"><strong>No score yet</strong></div>
         ) : (
-          <div className="gl-hero-score">
-            <strong>{average.toFixed(2)}</strong>
-            <span>/ 5</span>
-          </div>
+          <ScoreRing score={average} />
         )}
         <p className="gl-hero-summary">
-          {withGoals} of {team.length} {team.length === 1 ? 'person has' : 'people have'} goals
+          {withGoals} of {team.length} {team.length === 1 ? 'employee has' : 'employees have'} goals
           {waiting > 0 ? `, ${waiting} still waiting for theirs` : ''}
         </p>
       </div>
@@ -769,9 +796,7 @@ function ManagerGoalsContent() {
   return (
     <div className="gl-page">
       {!selected && !viewed && (
-        <div className={banner.isError ? undefined : 'gl-toast'}>
-          <Banner message={banner.message} isError={banner.isError} onClose={clear} />
-        </div>
+        <Banner message={banner.message} isError={banner.isError} onClose={clear} />
       )}
       <div className="gl-bar">
         <span />
@@ -786,7 +811,7 @@ function ManagerGoalsContent() {
       ) : (
         <>
           <TeamHero team={team} year={year} />
-          <Panel title="Your team" hint="Choose a person to set or review their goals">
+          <Panel title="Your team" hint="Choose an employee to set or review their goals">
             <ul className="gl-team">
               {team.map((person, index) => (
                 <li
@@ -844,7 +869,7 @@ function ManagerGoalsContent() {
 
 export function ManagerGoals() {
   return (
-    <Shell role="Manager" title="Team performance" subtitle="Set KPI goals for your team and follow how each person is doing">
+    <Shell role="Manager" title="Team performance" subtitle="Set KPI goals for your team and follow how each employee is doing">
       <ManagerGoalsContent />
     </Shell>
   );
@@ -852,7 +877,7 @@ export function ManagerGoals() {
 
 // ---------- HR: average performance by period ----------
 
-const YEAR_COLORS = ['#ec6a1a', '#4a4542', '#e3a72f', '#2f9e8f', '#c2557a', '#7a8aa6'];
+const YEAR_COLORS = ['#F07B1F', '#4B3A75', '#3B6FD9', '#2E9E6A', '#9C8FBF', '#B8530A'];
 
 function AllYears({ years }) {
   if (years === null) return <TableSkeleton />;
@@ -978,6 +1003,8 @@ function HRContent() {
                 : data.employees_count === 1 ? '1 employee has goals' : `${data.employees_count} employees have goals`
             }
             delta={data.employees_count > 0 && <Delta current={data.average_overall_score} previous={data.previous_average_overall_score} previousYear={data.previous_year} />}
+            history={data.history}
+            subject="Average score by year"
           />
           {data.periods.length === 0 ? (
             <div className="gl-panel">

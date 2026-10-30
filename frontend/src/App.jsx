@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import AuthAside from './AuthAside.jsx';
 
 function errorMessage(data) {
   if (!data || typeof data !== 'object') {
@@ -65,12 +66,9 @@ export default function App() {
 
   return (
     <main className="auth-page">
-      <a className="brand auth-brand" href="/" aria-label="Bayyinah home">
-        <img className="brand-logo" src="/bayyinah-logo.png" alt="" />
-        <span>Bayyinah <span className="brand-arabic">بينة</span></span>
-      </a>
+      <AuthAside />
       <section className="auth-card password-card" aria-labelledby="page-title">
-        <span className="auth-kicker">ACCOUNT SETUP</span>
+        <span className="auth-kicker">Account setup</span>
         {complete ? (
           <>
             <h1 id="page-title">You’re all set</h1>

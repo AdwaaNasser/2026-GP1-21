@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import AuthAside from './AuthAside.jsx';
 import { responseData, saveLogin } from './api.js';
 
 function dashboardForRole(role) {
@@ -35,9 +36,9 @@ export default function Login() {
 
   return (
     <main className="auth-page">
-      <a className="brand auth-brand" href="/" aria-label="Bayyinah home"><img className="brand-logo" src="/bayyinah-logo.png" alt="" /><span>Bayyinah <span className="brand-arabic">بينة</span></span></a>
+      <AuthAside />
       <section className="auth-card">
-        <span className="auth-kicker">WELCOME BACK</span>
+        <span className="auth-kicker">Welcome back</span>
         <h1>Good to see you.</h1>
         <p className="auth-description">Log in to continue to your Bayyinah workspace.</p>
         {error && <p className="notice error" role="alert">{error}</p>}

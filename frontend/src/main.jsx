@@ -15,6 +15,8 @@ import ProjectDetails from './ProjectDetails.jsx';
 import { EmployeePerformance, HRPerformance, ManagerGoals } from './Goals.jsx';
 import ManagerTeam from './ManagerTeam.jsx';
 import './style.css';
+import './theme.css';
+import { enhanceSelects } from './enhanceSelects.js';
 
 
 const pages = {
@@ -47,3 +49,5 @@ createRoot(document.getElementById('root')).render(
     <Page />
   </React.StrictMode>,
 );
+
+enhanceSelects();

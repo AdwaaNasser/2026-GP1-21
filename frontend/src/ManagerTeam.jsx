@@ -5,6 +5,7 @@ import { CURRENT_YEAR, Panel, YearSelect } from './Goals.jsx';
 import {
   Avatar,
   EmptyState,
+  Icon,
   StatusBadge,
   TableSkeleton,
   formatDate,
@@ -17,32 +18,35 @@ import {
 
 function TeamList({ team, onOpen }) {
   return (
-    <Panel title="Your team" hint={`${team.length} ${team.length === 1 ? 'person' : 'people'}`}>
-      <div className="ws-table-card">
-        <table className="ws-table">
-          <thead><tr><th>Name</th><th>Job title</th><th>Department</th><th aria-label="Open" /></tr></thead>
-          <tbody>
-            {team.map((person) => (
-              <tr key={person.id} style={{ cursor: 'pointer' }} onClick={() => onOpen(person.id)}>
-                <td>
-                  <div className="hr-person">
-                    <Avatar name={displayName(person)} size={28} />
-                    <div className="ws-task-title">{displayName(person)}</div>
-                  </div>
-                </td>
-                <td>{person.job_title || '—'}</td>
-                <td>{person.department || '—'}</td>
-                <td>
-                  <button type="button" className="ws-btn ws-btn-secondary ws-btn-sm" onClick={(event) => { event.stopPropagation(); onOpen(person.id); }}>
-                    View
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <>
+      <p className="mt-count">{team.length} {team.length === 1 ? 'employee reports' : 'employees report'} to you</p>
+      <div className="mt-grid">
+        {team.map((person, index) => {
+          return (
+            <button
+              type="button"
+              className="mt-card"
+              key={person.id}
+              style={{ '--i': index }}
+              onClick={() => onOpen(person.id)}
+            >
+              <span className="mt-top">
+                <Avatar name={displayName(person)} size={48} />
+                <span className="mt-who">
+                  <span className="mt-name">{displayName(person)}</span>
+                  <span className="mt-role">{person.job_title || 'No job title yet'}</span>
+                </span>
+              </span>
+              <span className="mt-dept">{person.department || 'No department'}</span>
+              <span className="mt-foot">
+                View profile
+                <Icon name="chevron" size={16} />
+              </span>
+            </button>
+          );
+        })}
       </div>
-    </Panel>
+    </>
   );
 }
 
@@ -72,17 +76,19 @@ function MemberDetails({ id, onBack }) {
         <TableSkeleton />
       ) : (
         <>
-          <section className="gl-panel">
-            <div className="hr-person" style={{ padding: 16 }}>
-              <Avatar name={name} size={48} />
-              <div>
-                <div className="ws-task-title">{name}</div>
-                <div className="ws-task-sub">
-                  {[data.profile.job_title, data.profile.department].filter(Boolean).join(' · ') || '—'}
-                </div>
-                <div className="ws-task-sub">{data.profile.email}</div>
-              </div>
+          <section className="mt-profile">
+            <Avatar name={name} size={72} />
+            <div className="mt-profile-main">
+              <h2>{name}</h2>
+              <p>{[data.profile.job_title, data.profile.department].filter(Boolean).join(' · ') || 'No job title or department yet'}</p>
+              <p className="mt-profile-mail">{data.profile.email}</p>
             </div>
+            <dl className="mt-facts">
+              <div><dt>{year} score</dt><dd>{perf.overall_score === null ? '—' : perf.overall_score.toFixed(2)}</dd></div>
+              <div><dt>Open tasks</dt><dd>{data.workload.open_tasks}</dd></div>
+              <div className={data.workload.overdue_tasks ? 'is-hot' : ''}><dt>Overdue</dt><dd>{data.workload.overdue_tasks}</dd></div>
+              <div><dt>Completed</dt><dd>{data.workload.completed_tasks}</dd></div>
+            </dl>
           </section>
 
           <Panel title="Skills">

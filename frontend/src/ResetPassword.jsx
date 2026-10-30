@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import AuthAside from './AuthAside.jsx';
 import { responseData } from './api.js';
 
 export default function ResetPassword() {
@@ -40,12 +41,9 @@ export default function ResetPassword() {
 
   return (
     <main className="auth-page">
-      <a className="brand auth-brand" href="/" aria-label="Bayyinah home">
-        <img className="brand-logo" src="/bayyinah-logo.png" alt="" />
-        <span>Bayyinah <span className="brand-arabic">بينة</span></span>
-      </a>
+      <AuthAside />
       <section className="auth-card password-card" aria-labelledby="page-title">
-        <span className="auth-kicker">ACCOUNT RECOVERY</span>
+        <span className="auth-kicker">Account recovery</span>
         {complete ? (
           <>
             <h1 id="page-title">Password updated</h1>

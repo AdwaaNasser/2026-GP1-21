@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
-import { apiRequest, clearLogin, displayName, getLogin, responseData } from './api.js';
+import { useEffect, useMemo, useState } from 'react';
+import { apiRequest, displayName, getLogin, responseData } from './api.js';
 
 import Shell, { Banner } from './Shell.jsx';
 import {
   EmptyState,
+  Icon,
   ProgressBar,
   Stats,
   StatusBadge,
@@ -15,39 +16,66 @@ import {
   useBanner,
 } from './taskUi.jsx';
 
-const BATCH_KEY = 'bayyinahCsvImportV2';
-
 function dashboardPath(role) {
   if (role === 'HR' || role === 'HR Professional') return '/dashboard/hr';
   if (role === 'Manager') return '/dashboard/manager';
   return '/dashboard/employee';
 }
 
-function initials(name = '') {
-  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'B';
+// ---------- Overview hero (shared by every role) ----------
+
+function greeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
 }
+
+// A greeting, one sentence about where things stand, the main actions, and a
+// small column chart that rises into place once when the page opens.
+function OverviewHero({ name, lead, actions, chartTitle, columns = [], emptyText }) {
+  const max = Math.max(1, ...columns.map((column) => column.value));
+  const hasData = columns.some((column) => column.value > 0);
+  const withChart = columns.length > 0;
+  return (
+    <section className={`ov-hero${withChart ? '' : ' ov-hero-solo'}`}>
+      <div className="ov-copy">
+        <h2>{greeting()}, {name}.</h2>
+        <p className="ov-lead">{lead}</p>
+        <div className="ov-actions">{actions}</div>
+      </div>
+      {withChart && <figure className="ov-chart">
+        <figcaption>{chartTitle}</figcaption>
+        {hasData ? (
+          <div className="ov-cols" role="img" aria-label={columns.map((column) => `${column.label}: ${column.value}`).join(', ')}>
+            {columns.map((column, index) => (
+              <div className={`ov-col${column.hot ? ' ov-hot' : ''}`} key={column.label} style={{ '--i': index }}>
+                <span className="ov-val">{column.value}</span>
+                <span className="ov-bar" style={{ '--h': column.value / max }} />
+                <span className="ov-name" title={column.label}>{column.label}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="ov-empty">{emptyText}</p>
+        )}
+      </figure>}
+    </section>
+  );
+}
+
+function firstName(user) {
+  return user?.first_name || displayName(user).split(' ')[0];
+}
+
+// ---------- HR overview ----------
+// A summary of the organization. Adding, importing and editing people lives on
+// the People page, so nothing is done twice.
 
 export default function Dashboard({ role }) {
   const [login, setLogin] = useState(null);
-  const [employees, setEmployees] = useState([]);
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [batch, setBatch] = useState(() => {
-    try {
-      return JSON.parse(sessionStorage.getItem(BATCH_KEY) || 'null');
-    } catch {
-      return null;
-    }
-  });
-  const [message, setMessage] = useState('');
-  const [isError, setIsError] = useState(false);
-  const [isBusy, setIsBusy] = useState(false);
-
-  // A success message pops up and goes away by itself; errors stay until the next action.
-  useEffect(() => {
-    if (!message || isError) return undefined;
-    const timer = setTimeout(() => setMessage(''), 4500);
-    return () => clearTimeout(timer);
-  }, [message, isError]);
+  const [employees, setEmployees] = useState(null);
+  const { banner, failure, clear } = useBanner();
 
   useEffect(() => {
     const savedLogin = getLogin();
@@ -55,334 +83,100 @@ export default function Dashboard({ role }) {
       window.location.replace('/login');
       return;
     }
-
-
     const actualRole = savedLogin.user.role === 'HR Professional' ? 'HR' : savedLogin.user.role;
     if (actualRole !== role) {
       window.location.replace(dashboardPath(actualRole));
       return;
     }
-
     setLogin(savedLogin);
-    loadEmployees();
+    // The old overview kept its own import summary; it now lives on the People page.
+    try { sessionStorage.removeItem('bayyinahCsvImportV2'); } catch { /* storage can be blocked */ }
+    apiRequest('/api/accounts/employees/')
+      .then(responseData)
+      .then(setEmployees)
+      .catch((error) => {
+        failure(error);
+        setEmployees([]);
+      });
   }, [role]);
 
-  async function loadEmployees() {
-    try {
-      const response = await apiRequest('/api/accounts/employees/');
-      setEmployees(await responseData(response));
-    } catch (error) {
-      setIsError(true);
-      setMessage(error.message || 'Employee information could not be loaded.');
-    }
-  }
-
-  async function importCsv(event) {
-    event.preventDefault();
-    if (!selectedFile) {
-      setIsError(true);
-      setMessage('Choose a CSV file before importing.');
-      return;
-    }
-
-    setIsBusy(true);
-    setMessage('');
-    setIsError(false);
-    try {
-      const form = new FormData();
-      form.append('file', selectedFile);
-      const response = await apiRequest('/api/accounts/import-csv/', {
-        method: 'POST',
-        body: form,
-      });
-      const result = await responseData(response);
-      setBatch(result);
-      sessionStorage.setItem(BATCH_KEY, JSON.stringify(result));
-      setSelectedFile(null);
-      event.target.reset();
-      setMessage(result.status);
-      setIsError(result.errors.length > 0);
-      await loadEmployees();
-    } catch (error) {
-      setIsError(true);
-      setMessage(error.message || 'The CSV could not be imported.');
-    } finally {
-      setIsBusy(false);
-    }
-  }
-
-  async function inviteAll() {
-    if (!batch?.pending_invitation_ids?.length) return;
-    setIsBusy(true);
-    setMessage('');
-    setIsError(false);
-    try {
-      const response = await apiRequest(
-        '/api/accounts/import-csv/invite-all/',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ employee_ids: batch.pending_invitation_ids }),
-        },
-      );
-      const result = await responseData(response);
-      const updatedBatch = {
-        ...batch,
-        invitations: result,
-        pending_invitation_ids: result.remaining_ids,
-      };
-      setMessage(result.message);
-      setIsError(result.errors.length > 0);
-      if (result.remaining === 0 && result.errors.length === 0) {
-        // Everyone was invited: the summary is done, so it leaves the page.
-        setBatch(null);
-        sessionStorage.removeItem(BATCH_KEY);
-        window.history.replaceState(null, '', '/dashboard/hr?invitations=sent');
-        await loadEmployees();
-      } else {
-        setBatch(updatedBatch);
-        sessionStorage.setItem(BATCH_KEY, JSON.stringify(updatedBatch));
-      }
-    } catch (error) {
-      setIsError(true);
-      setMessage(error.message || 'Invitations could not be sent.');
-    } finally {
-      setIsBusy(false);
-    }
-  }
-
-  function logout() {
-    clearLogin();
-    sessionStorage.removeItem(BATCH_KEY);
-    window.location.assign('/');
-  }
+  const summary = useMemo(() => {
+    const people = employees || [];
+    const departments = {};
+    people.forEach((person) => {
+      const name = person.department?.name || 'No department';
+      departments[name] = (departments[name] || 0) + 1;
+    });
+    return {
+      total: people.length,
+      managers: people.filter((person) => person.role === 'Manager').length,
+      hr: people.filter((person) => person.role === 'HR').length,
+      waiting: people.filter((person) => person.invitation_pending).sort((a, b) => b.id - a.id),
+      departments: Object.entries(departments).sort((a, b) => b[1] - a[1]),
+    };
+  }, [employees]);
 
   if (!login) {
     return <main className="page"><section className="card">Opening your workspace…</section></main>;
   }
 
-  const departmentNames = [...new Set(employees.map((employee) => employee.department?.name).filter(Boolean))];
-  const managerCount = employees.filter((employee) => employee.role === 'Manager').length;
-  const employeeCount = employees.filter((employee) => employee.role === 'Employee').length;
-  const hrCount = employees.filter((employee) => employee.role === 'HR').length;
-  const waiting = employees.filter((employee) => employee.invitation_pending).sort((a, b) => b.id - a.id);
-  const active = employees.filter((employee) => !employee.invitation_pending);
-  const invitationsPending = batch?.invitations?.remaining ?? batch?.summary?.total_added ?? 0;
-
   return (
-    <Shell role={role} title={role === 'HR' ? 'HR Dashboard' : `${role} Dashboard`} subtitle={`Welcome back, ${displayName(login.user)}`}>
-      <div className="dashboard dashboard-in-shell">
-      {message && (
-        <div className={isError ? undefined : 'status-toast'}>
-          <div className={`status-banner${isError ? ' error' : ''}`} role="status">
-            <span aria-hidden="true">{isError ? '!' : '✓'}</span>
-            <span>{message}</span>
-          </div>
-        </div>
-      )}
-
-      <div className="dashboard-workspace">
-        <div className="dashboard-content">
-        <div className="dashboard-main">
-          {role === 'HR' && (
-            <>
-              {waiting.length > 0 && (
-                <section className="dashboard-panel" id="waiting">
-                  <div className="dashboard-toolbar">
-                    <div>
-                      <h2>Newly added</h2>
-                      <p className="description">
-                        {waiting.length} {waiting.length === 1 ? 'person has' : 'people have'} not set a password yet.
-                        They move to the list below once they do.
-                      </p>
-                    </div>
-                  </div>
-                  <EmployeeTable employees={waiting} />
-                </section>
-              )}
-
-              <section className="dashboard-panel" id="import">
-                <div className="dashboard-toolbar">
-                  <div>
-                    <h2>Bring your team into Bayyinah</h2>
-                    <p className="description">
-                      Import your employee list. Review the department summary, then send
-                      secure invitations when everything looks right. Each row must include
-                      a hire_date in YYYY-MM-DD format to calculate years of service.
-                    </p>
-                  </div>
-                  <a className="button button-primary" href="#upload">Import team</a>
-                </div>
-                <form className="upload-form" id="upload" onSubmit={importCsv}>
-                  <label htmlFor="employee-csv">Choose an employee CSV file</label>
-                  <input
-                    id="employee-csv"
-                    type="file"
-                    accept=".csv,text/csv"
-                    onChange={(event) => setSelectedFile(event.target.files?.[0] || null)}
-                    disabled={isBusy}
-                    required
-                  />
-                  <button className="button button-primary" type="submit" disabled={isBusy || !selectedFile}>
-                    {isBusy ? 'Importing…' : 'Upload and review'}
-                  </button>
-                </form>
-
-                {batch && (
-                  <div className="import-summary">
-                    <div className="summary-title">
-                      <h3>Import summary</h3>
-                      <span className="summary-state">
-                        {batch.invitations?.remaining === 0 ? 'Invitations sent' : 'Ready to invite'}
-                      </span>
-                    </div>
-                    <div className="summary-grid">
-                      <div><strong>{batch.summary.employees_added}</strong><span>Employees added</span></div>
-                      <div><strong>{batch.summary.managers_added}</strong><span>Managers added</span></div>
-                      <div><strong>{batch.summary.hr_added || 0}</strong><span>HR added</span></div>
-                      <div><strong>{batch.summary.departments.length}</strong><span>Departments</span></div>
-                    </div>
-                    <div className="table-wrap">
-                      <table>
-                        <thead>
-                          <tr><th>Department</th><th>Employees</th><th>Managers</th><th>HR</th></tr>
-                        </thead>
-                        <tbody>
-                          {batch.summary.departments.map((department) => (
-                            <tr key={department.name}>
-                              <td>{department.name}</td>
-                              <td>{department.employees}</td>
-                              <td>{department.managers}</td>
-                              <td>{department.hr || 0}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    {batch.errors.length > 0 && (
-                      <div className="summary-errors">
-                        <strong>Some rows need review</strong>
-                        <ul>
-                          {batch.errors.map((error) => (
-                            <li key={`${error.row}-${String(error.detail)}`}>
-                              Row {error.row}: {Array.isArray(error.detail) ? error.detail.join(' ') : error.detail}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    <div className="import-actions">
-                      <p>
-                        {batch.invitations
-                          ? `${batch.invitations.invited} invited · ${batch.invitations.remaining} remaining`
-                          : 'Accounts are saved without passwords. Invitations have not been sent yet.'}
-                      </p>
-                      <button
-                        className="button button-primary"
-                        type="button"
-                        onClick={inviteAll}
-                        disabled={isBusy || batch.summary.total_added === 0 || batch.invitations?.remaining === 0}
-                      >
-                        {isBusy ? 'Sending invitations…' : batch.invitations?.remaining === 0 ? 'Invitations sent' : 'Invite all'}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </section>
-
-              <section className="dashboard-panel" id="team">
-                <div className="dashboard-toolbar">
-                  <div>
-                    <h2>People in your organization</h2>
-                    <p className="description">Employee information is scoped to your organization.</p>
-                  </div>
-                </div>
-                <EmployeeTable employees={active} />
-              </section>
-            </>
-          )}
-
-          {role === 'Manager' && (
-            <section className="dashboard-panel" id="team">
-              <h2>Your team</h2>
-              <p className="description">People information available to your Manager role.</p>
-              <EmployeeTable employees={employees} />
-            </section>
-          )}
-
-          {role === 'Employee' && (
-            <section className="dashboard-panel" id="team">
-              <h2>Your employee profile</h2>
-              <p className="description">Your account details and department.</p>
-              <EmployeeTable employees={employees} />
-            </section>
-          )}
-        </div>
-
-        <aside className="dashboard-aside">
-          <section className="dashboard-panel" id={role === 'HR' ? 'overview' : undefined}>
-            <h2>{role === 'HR' ? 'Team at a glance' : 'Your access'}</h2>
-            {role === 'HR' ? (
+    <Shell role="HR" title="Overview">
+      <Banner message={banner.message} isError={banner.isError} onClose={clear} />
+      {employees === null ? (
+        <TableSkeleton rows={4} />
+      ) : (
+        <>
+          <OverviewHero
+            name={firstName(login.user)}
+            lead={summary.total === 0
+              ? 'Your workspace is empty. Add your first employee or import a CSV file to get started.'
+              : `${summary.total} ${summary.total === 1 ? 'employee' : 'employees'} across ${summary.departments.length} ${summary.departments.length === 1 ? 'department' : 'departments'}${summary.waiting.length ? `, and ${summary.waiting.length} ${summary.waiting.length === 1 ? 'has' : 'have'} not logged in yet` : ', all set up'}.`}
+            actions={(
               <>
-                <div className="aside-stat"><span>Employees</span><strong>{employeeCount}</strong></div>
-                <div className="aside-stat"><span>Managers</span><strong>{managerCount}</strong></div>
-                <div className="aside-stat"><span>HR</span><strong>{hrCount}</strong></div>
-                <div className="aside-stat"><span>Departments</span><strong>{departmentNames.length}</strong></div>
-                <div className="aside-stat"><span>Awaiting invite</span><strong>{invitationsPending}</strong></div>
-              </>
-            ) : (
-              <>
-                <div className="aside-stat"><span>Signed in as</span><strong>{role}</strong></div>
-                <div className="aside-stat"><span>Visible records</span><strong>{employees.length}</strong></div>
-                <div className="aside-stat"><span>Department</span><strong>{employees[0]?.department?.name || '—'}</strong></div>
+                <a className="ws-btn ws-btn-primary" href="/hr/team"><Icon name="users" size={16} />{summary.total === 0 ? 'Add employees' : 'Manage employees'}</a>
+                <a className="ws-btn ws-btn-secondary" href="/hr/performance"><Icon name="flag" size={16} />View performance</a>
               </>
             )}
+            chartTitle="Employees by department"
+            columns={summary.departments.slice(0, 6).map(([name, count], index) => ({ label: name, value: count, hot: index === 0 }))}
+            emptyText="Departments show up here once you add employees."
+          />
+
+          <Stats items={[
+            { label: 'Employees', value: summary.total },
+            { label: 'Managers', value: summary.managers },
+            { label: 'HR professionals', value: summary.hr },
+            { label: 'Departments', value: summary.departments.length },
+            { label: 'Waiting for first login', value: summary.waiting.length, tone: summary.waiting.length ? 'warn' : '' },
+          ]}
+          />
+
+          <section className="ws-card ws-side-card">
+            <div className="ws-card-head">
+              <h3>Waiting for first login</h3>
+              <a className="ws-link" href="/hr/team">Open Employees</a>
+            </div>
+            {summary.waiting.length === 0 ? (
+              <p className="ws-hint ws-list-empty">Everyone you added has set up their account.</p>
+            ) : (
+              <ul className="ws-mini-list">
+                {summary.waiting.slice(0, 6).map((person) => (
+                  <li key={person.id}>
+                    <span className="ws-person">
+                      <span className="ws-mini-title">{displayName(person)}</span>
+                    </span>
+                    <span className="ws-mini-meta">{person.department?.name || person.email}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
-          <section className="info-card">
-            <h3>{role === 'HR' ? 'A thoughtful start' : 'Your workspace, at a glance'}</h3>
-            <p>
-              {role === 'HR'
-                ? 'Review every imported record before inviting your team. Each person sets their own password from a private invitation link.'
-                : role === 'Manager'
-                  ? 'Your team list is limited to employees in your department. HR manages organization-wide employee changes.'
-                  : 'Your account only has access to your own employee profile.'}
-            </p>
-            {role === 'HR' && <a className="button" href="#import">Import your team</a>}
-          </section>
-        </aside>
-      </div>
-      </div>
-      </div>
+        </>
+      )}
     </Shell>
   );
 }
-
-function EmployeeTable({ employees }) {
-  if (!employees.length) {
-    return <div className="empty-state">No employee records are available for this account yet.</div>;
-  }
-
-  return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr><th>Name</th><th>Email</th><th>Role</th><th>Department</th></tr>
-        </thead>
-        <tbody>
-          {employees.map((employee) => (
-            <tr key={employee.id}>
-              <td>{displayName(employee)}</td>
-              <td>{employee.email}</td>
-              <td><span className={`table-role${employee.role === 'Manager' ? ' manager' : ''}`}>{employee.role}</span></td>
-              <td>{employee.department?.name || '—'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 
 // ---------- Manager and employee overview ----------
 
@@ -460,9 +254,30 @@ function OverviewContent({ role }) {
     const review = sortTasks(tasks.filter((task) => task.status === 'in_review'), 'due');
     const overdue = sortTasks(tasks.filter((task) => isOverdue(task)), 'due');
     const taskHref = (task) => `/manager/tasks?task=${task.id}`;
+    const done = tasks.filter((task) => task.status === 'completed').length;
     return (
       <>
         <Banner message={banner.message} isError={banner.isError} onClose={clear} />
+        <OverviewHero
+          name={firstName(getLogin()?.user)}
+          lead={review.length + overdue.length === 0
+            ? 'Nothing is waiting on you right now.'
+            : `${review.length} ${review.length === 1 ? 'task is' : 'tasks are'} waiting for your review${overdue.length ? ` and ${overdue.length} ${overdue.length === 1 ? 'is' : 'are'} overdue` : ''}.`}
+          actions={(
+            <>
+              <a className="ws-btn ws-btn-primary" href="/manager/tasks"><Icon name="tasks" size={16} />Open tasks</a>
+              <a className="ws-btn ws-btn-secondary" href="/manager/goals"><Icon name="flag" size={16} />Team performance</a>
+            </>
+          )}
+          chartTitle="Tasks by status"
+          columns={[
+            { label: 'To do', value: tasks.filter((task) => task.status === 'todo').length },
+            { label: 'In progress', value: tasks.filter((task) => ['in_progress', 'changes_requested'].includes(task.status)).length },
+            { label: 'In review', value: review.length, hot: true },
+            { label: 'Completed', value: done },
+          ]}
+          emptyText="Create a task to see your workload here."
+        />
         <Stats items={[
           { label: 'Projects', value: projects.length },
           { label: 'Open tasks', value: open.length },
@@ -515,6 +330,18 @@ function OverviewContent({ role }) {
   return (
     <>
       <Banner message={banner.message} isError={banner.isError} onClose={clear} />
+      <OverviewHero
+        name={firstName(getLogin()?.user)}
+        lead={attention.length === 0
+          ? (actionable.length ? `You have ${actionable.length} open ${actionable.length === 1 ? 'task' : 'tasks'}, and none need urgent attention.` : 'You are all caught up.')
+          : `${attention.length} ${attention.length === 1 ? 'task needs' : 'tasks need'} your attention${changes.length ? `, including ${changes.length} with changes requested` : ''}.`}
+        actions={(
+          <>
+            <a className="ws-btn ws-btn-primary" href="/employee/tasks"><Icon name="tasks" size={16} />My tasks</a>
+            <a className="ws-btn ws-btn-secondary" href="/employee/performance"><Icon name="flag" size={16} />My performance</a>
+          </>
+        )}
+      />
       <Stats items={[
         { label: 'Open tasks', value: actionable.length },
         { label: 'Changes requested', value: changes.length, tone: changes.length ? 'danger' : '' },

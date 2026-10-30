@@ -63,8 +63,8 @@ export function LineChart({ id, categories, series, dark = false, label, width =
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label}>
         <defs>
           <linearGradient id={`${id}-area`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={dark ? '#ffffff' : '#ec6a1a'} stopOpacity={dark ? 0.42 : 0.32} />
-            <stop offset="100%" stopColor={dark ? '#ffffff' : '#ec6a1a'} stopOpacity="0" />
+            <stop offset="0%" stopColor={dark ? '#F07B1F' : '#F07B1F'} stopOpacity={dark ? 0.42 : 0.32} />
+            <stop offset="100%" stopColor={dark ? '#F07B1F' : '#F07B1F'} stopOpacity="0" />
           </linearGradient>
         </defs>
 

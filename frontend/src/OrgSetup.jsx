@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import AuthAside from './AuthAside.jsx';
 import { responseData, saveLogin } from './api.js';
 
 export default function OrgSetup() {
@@ -50,9 +51,9 @@ export default function OrgSetup() {
 
   return (
     <main className="auth-page setup-page">
-      <a className="brand auth-brand" href="/" aria-label="Bayyinah home"><img className="brand-logo" src="/bayyinah-logo.png" alt="" /><span>Bayyinah <span className="brand-arabic">بينة</span></span></a>
+      <AuthAside />
       <section className="auth-card setup-card">
-        <span className="auth-kicker">YOUR WORKSPACE STARTS HERE</span>
+        <span className="auth-kicker">Your workspace starts here</span>
         <h1>Set up your organization.</h1>
         <p className="auth-description">
           Create your organization and HR administrator account. You’ll be able to

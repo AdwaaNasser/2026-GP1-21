@@ -134,16 +134,16 @@ function Gauge({ score }) {
       <svg viewBox="0 0 220 125">
         <defs>
           <linearGradient id="mk-grad" gradientUnits="userSpaceOnUse" x1="20" x2="200" y1="0" y2="0">
-            <stop offset="0" stopColor="#34775b" />
-            <stop offset="0.5" stopColor="#ec6a1a" />
-            <stop offset="1" stopColor="#d92d20" />
+            <stop offset="0" stopColor="#2E9E6A" />
+            <stop offset="0.5" stopColor="#F07B1F" />
+            <stop offset="1" stopColor="#D64545" />
           </linearGradient>
         </defs>
-        <path d="M 20 110 A 90 90 0 0 1 200 110" fill="none" stroke="#efe9f3" strokeWidth="18" strokeLinecap="round" />
+        <path d="M 20 110 A 90 90 0 0 1 200 110" fill="none" stroke="#EEEAF6" strokeWidth="18" strokeLinecap="round" />
         <path d="M 20 110 A 90 90 0 0 1 200 110" fill="none" stroke="url(#mk-grad)" strokeWidth="18" strokeLinecap="round" opacity="0.95" />
         <line x1="110" y1="110" x2={tipX} y2={tipY} stroke="#fff" strokeWidth="8" strokeLinecap="round" />
-        <line x1="110" y1="110" x2={tipX} y2={tipY} stroke="#311442" strokeWidth="4" strokeLinecap="round" />
-        <circle cx="110" cy="110" r="10" fill="#311442" stroke="#fff" strokeWidth="2" />
+        <line x1="110" y1="110" x2={tipX} y2={tipY} stroke="#2D1B4E" strokeWidth="4" strokeLinecap="round" />
+        <circle cx="110" cy="110" r="10" fill="#2D1B4E" stroke="#fff" strokeWidth="2" />
         <circle cx="110" cy="110" r="3.5" fill="#fff" />
       </svg>
       <strong>{Math.round(value)}<span>%</span></strong>
@@ -320,7 +320,7 @@ export default function Home() {
                 <div className="preview-sidebar">
                   <span className="side-active">Overview</span>
                   <span>Dashboards</span>
-                  <span>People</span>
+                  <span>Employees</span>
                   <span>Departments</span>
                   <span>Reports</span>
                 </div>
