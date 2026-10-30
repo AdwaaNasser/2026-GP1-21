@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiRequest, displayName, getLogin, responseData } from './api.js';
-
-import Shell, { Banner } from './Shell.jsx';
 import {
+  Shell,
+  Banner,
   EmptyState,
   Icon,
   ProgressBar,
@@ -14,7 +14,7 @@ import {
   isOverdue,
   sortTasks,
   useBanner,
-} from './taskUi.jsx';
+} from './ui.jsx';
 
 function dashboardPath(role) {
   if (role === 'HR' || role === 'HR Professional') return '/dashboard/hr';
@@ -72,7 +72,7 @@ function firstName(user) {
 // A summary of the organization. Adding, importing and editing people lives on
 // the People page, so nothing is done twice.
 
-export default function Dashboard({ role }) {
+export function Dashboard({ role }) {
   const [login, setLogin] = useState(null);
   const [employees, setEmployees] = useState(null);
   const { banner, failure, clear } = useBanner();

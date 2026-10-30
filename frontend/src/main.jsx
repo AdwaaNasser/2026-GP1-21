@@ -1,29 +1,19 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import App from './App.jsx';
-import Dashboard, { DashboardRouter } from './Dashboard.jsx';
-import Home from './Home.jsx';
-import Login from './Login.jsx';
-import OrgSetup from './OrgSetup.jsx';
-import HrTeam from './HrTeam.jsx';
-import ForgotPassword from './ForgotPassword.jsx';
-import ResetPassword from './ResetPassword.jsx';
-import EmployeeTasks from './EmployeeTasks.jsx';
-import ManagerProjects from './ManagerProjects.jsx';
-import ManagerTasks from './ManagerTasks.jsx';
-import ProjectDetails from './ProjectDetails.jsx';
-import { EmployeePerformance, HRPerformance, ManagerGoals } from './Goals.jsx';
-import ManagerTeam from './ManagerTeam.jsx';
-import './style.css';
-import './theme.css';
-import { enhanceSelects } from './enhanceSelects.js';
-
+import { SetPassword, Login, OrgSetup, ForgotPassword, ResetPassword } from './Auth.jsx';
+import { Dashboard, DashboardRouter } from './Dashboard.jsx';
+import { Home } from './Home.jsx';
+import { EmployeePerformance, HRPerformance, ManagerGoals } from './Performance.jsx';
+import { HrTeam, ManagerTeam } from './Team.jsx';
+import { enhanceSelects } from './ui.jsx';
+import { EmployeeTasks, ManagerProjects, ManagerTasks, ProjectDetails } from './Work.jsx';
+import './styles.css';
 
 const pages = {
   '/': Home,
   '/login': Login,
   '/setup': OrgSetup,
-  '/set-password': App,
+  '/set-password': SetPassword,
   '/forgot-password': ForgotPassword,
   '/reset-password': ResetPassword,
   '/dashboard/hr': () => <Dashboard role="HR" />,

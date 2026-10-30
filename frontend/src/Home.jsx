@@ -1,6 +1,57 @@
 import { useEffect, useRef, useState } from 'react';
-import SiteHeader from './SiteHeader.jsx';
-import SiteFooter from './SiteFooter.jsx';
+
+// ==================== SiteHeader ====================
+
+const LINKS = [
+  ['#burnout', 'Burnout insights'],
+  ['#how', 'How it works'],
+  ['#about', 'About us'],
+  ['#faq', 'Get to know us'],
+];
+
+export function SiteHeader() {
+  return (
+    <div className="mk-sticky">
+      <header className="site-header">
+        <a className="brand" href="/" aria-label="Bayyinah home">
+          <img className="brand-logo" src="/bayyinah-logo.png" alt="" />
+          <span className="brand-word"><span className="brand-latin">Bayyinah</span><span className="brand-arabic" lang="ar" dir="rtl">بيّنة</span></span>
+        </a>
+        <nav className="site-nav" aria-label="Main navigation">
+          {LINKS.map(([href, text]) => <a key={href} className="nav-login mk-link" href={href}>{text}</a>)}
+          <a className="nav-login" href="/login">Log in</a>
+          <a className="button button-primary button-small" href="/setup">Get started</a>
+        </nav>
+      </header>
+    </div>
+  );
+}
+
+// ==================== SiteFooter ====================
+
+const LINKS_SiteFooter = [
+  ['#burnout', 'Burnout insights'],
+  ['#about', 'About us'],
+  ['#faq', 'Get to know us'],
+  ['/login', 'Log in'],
+];
+
+export function SiteFooter() {
+  return (
+    <footer className="site-footer mk-footer">
+      <a className="brand footer-brand" href="/" aria-label="Bayyinah home">
+        <img className="brand-logo" src="/bayyinah-logo.png" alt="" />
+        <span className="brand-word"><span className="brand-latin">Bayyinah</span><span className="brand-arabic" lang="ar" dir="rtl">بيّنة</span></span>
+      </a>
+      <nav className="mk-footer-links" aria-label="Footer">
+        {LINKS_SiteFooter.map(([href, text]) => <a key={href} href={href}>{text}</a>)}
+      </nav>
+      <span>© 2026 Bayyinah Platform. All rights reserved.</span>
+    </footer>
+  );
+}
+
+// ==================== Home ====================
 
 function useReveal() {
   const ref = useRef(null);
@@ -280,7 +331,7 @@ const FAQ = [
   ['How do employees join?', 'HR adds them one by one or imports a CSV file. Each person gets an email invitation and sets their own password.'],
 ];
 
-export default function Home() {
+export function Home() {
   return (
     <div className="marketing-page mk-page">
       <SiteHeader />
