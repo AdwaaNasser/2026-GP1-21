@@ -1,12 +1,677 @@
 import { useEffect, useRef, useState } from 'react';
 
-// ==================== SiteHeader ====================
+/* ==========================================================================
+   Bayyinah landing page
+   Its styles are in styles.css (section 18) and start with "lx-".
+   SiteHeader and SiteFooter are still exported in case another page uses them.
+   ========================================================================== */
+
+// ==================== Shared helpers ====================
+
+function prefersReducedMotion() {
+  return Boolean(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
+
+// True once the element has scrolled into view (and stays true).
+function useInView(threshold = 0.25) {
+  const ref = useRef(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return undefined;
+    if (!('IntersectionObserver' in window)) {
+      setInView(true);
+      return undefined;
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setInView(true);
+        observer.disconnect();
+      }
+    }, { threshold });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [threshold]);
+  return [ref, inView];
+}
+
+function Reveal({ as: Tag = 'div', className = '', delay = 0, children, ...rest }) {
+  const [ref, inView] = useInView(0.15);
+  return (
+    <Tag
+      ref={ref}
+      className={`lx-reveal${inView ? ' is-in' : ''} ${className}`}
+      style={{ transitionDelay: `${delay}ms` }}
+      {...rest}
+    >
+      {children}
+    </Tag>
+  );
+}
+
+function useCountUp(target, run, duration = 1400) {
+  const [value, setValue] = useState(0);
+  useEffect(() => {
+    if (!run) return undefined;
+    if (prefersReducedMotion()) {
+      setValue(target);
+      return undefined;
+    }
+    const start = performance.now();
+    let frame;
+    const tick = (now) => {
+      const t = Math.min(1, (now - start) / duration);
+      setValue(target * (1 - (1 - t) ** 3));
+      if (t < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [target, run, duration]);
+  return Math.round(value);
+}
+
+// Lets a card's glow follow the mouse.
+function trackSpotlight(event) {
+  const rect = event.currentTarget.getBoundingClientRect();
+  event.currentTarget.style.setProperty('--x', `${event.clientX - rect.left}px`);
+  event.currentTarget.style.setProperty('--y', `${event.clientY - rect.top}px`);
+}
+
+function Example() {
+  return <span className="lx-example">Illustrative example</span>;
+}
+
+function Brand({ small = false }) {
+  return (
+    <a className={`lx-brand${small ? ' lx-brand-small' : ''}`} href="/" aria-label="Bayyinah home">
+      <img src="/bayyinah-logo.png" alt="" />
+      <span>Bayyinah</span>
+      <span className="lx-brand-ar" lang="ar" dir="rtl">بيّنة</span>
+    </a>
+  );
+}
+
+// ==================== Header ====================
+
+const NAV = [
+  ['#burnout', 'Burnout insights'],
+  ['#assign', 'Smart assignment'],
+  ['#roles', 'For your team'],
+  ['#faq', 'FAQ'],
+];
+
+function LxHeader() {
+  const [scrolled, setScrolled] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 24);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (event) => { if (event.key === 'Escape') setOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
+
+  return (
+    <header className={`lx-header${scrolled ? ' is-scrolled' : ''}${open ? ' is-open' : ''}`}>
+      <a className="lx-skip" href="#main">Skip to content</a>
+      <div className="lx-header-bar">
+        <Brand />
+        <nav className="lx-nav" aria-label="Main navigation">
+          {NAV.map(([href, text]) => <a key={href} href={href}>{text}</a>)}
+        </nav>
+        <div className="lx-header-actions">
+          <a className="lx-login" href="/login">Log in</a>
+          <a className="lx-btn lx-btn-primary lx-btn-sm" href="/setup">Get started</a>
+          <button
+            type="button"
+            className="lx-menu-btn"
+            aria-expanded={open}
+            aria-controls="lx-mobile-nav"
+            aria-label={open ? 'Close menu' : 'Open menu'}
+            onClick={() => setOpen((value) => !value)}
+          >
+            <span /><span />
+          </button>
+        </div>
+      </div>
+      <nav id="lx-mobile-nav" className="lx-mobile-nav" aria-label="Mobile navigation" hidden={!open}>
+        {NAV.map(([href, text]) => <a key={href} href={href} onClick={() => setOpen(false)}>{text}</a>)}
+        <a href="/login" onClick={() => setOpen(false)}>Log in</a>
+        <a className="lx-btn lx-btn-primary" href="/setup">Get started</a>
+      </nav>
+    </header>
+  );
+}
+
+// ==================== Hero ====================
+
+const HEADLINE = ['See', 'your', 'workforce', 'clearly.'];
+const HEADLINE_ACCENT = ['Decide', 'with', 'confidence.'];
+
+// Small line icons, drawn like the ones in the Bayyinah sidebar.
+const ICONS = {
+  overview: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>,
+  projects: <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />,
+  tasks: <><path d="M3 6l2 2 3-3M3 13l2 2 3-3" /><path d="M11 7h10M11 14h10M11 20h10" /></>,
+  team: <><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0" /><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.5a6.5 6.5 0 0 1 3.5 5.5" /></>,
+  performance: <path d="M5 21V4M5 4h11l-2 4 2 4H5" />,
+  calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /></>,
+  user: <><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>,
+};
+
+function Icon({ name }) {
+  return (
+    <svg className="lxm-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {ICONS[name]}
+    </svg>
+  );
+}
+
+const SIDE_NAV = [['overview', 'Overview'], ['projects', 'Projects'], ['tasks', 'Tasks'], ['team', 'My team'], ['performance', 'Performance']];
+const RISK_BARS = [['Low', 11, 'low'], ['Medium', 5, 'med'], ['High', 2, 'high']];
+
+function HeroApp() {
+  const ref = useRef(null);
+
+  const onMove = (event) => {
+    if (prefersReducedMotion()) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const px = (event.clientX - rect.left) / rect.width - 0.5;
+    const py = (event.clientY - rect.top) / rect.height - 0.5;
+    ref.current?.style.setProperty('--rx', `${(-py * 6).toFixed(2)}deg`);
+    ref.current?.style.setProperty('--ry', `${(px * 8).toFixed(2)}deg`);
+  };
+  const onLeave = () => {
+    ref.current?.style.setProperty('--rx', '0deg');
+    ref.current?.style.setProperty('--ry', '0deg');
+  };
+
+  return (
+    <div className="lx-stage" onMouseMove={onMove} onMouseLeave={onLeave}>
+      <span className="lx-stage-badge"><Example /></span>
+      <div className="lx-app lxm-app" ref={ref} role="img" aria-label="Illustrative Bayyinah manager overview showing task priorities and team workload">
+        <aside className="lxm-side" aria-hidden="true">
+          <div className="lxm-brand"><img src="/bayyinah-logo.png" alt="" /> Bayyinah</div>
+          <nav>
+            {SIDE_NAV.map(([icon, label], index) => (
+              <span key={label} className={index === 0 ? 'is-active' : ''}><Icon name={icon} />{label}</span>
+            ))}
+          </nav>
+          <div className="lxm-me"><span className="lxm-av lxm-av-dark">KA</span><span><b>Khalid Alsubaie</b><small>Manager</small></span></div>
+        </aside>
+
+        <div className="lxm-main" aria-hidden="true">
+          <div className="lxm-top">
+            <span className="lxm-page-icon"><Icon name="overview" /></span>
+            <span className="lxm-top-title"><small>Workspace <i>›</i> <em>Overview</em></small><b>Overview</b></span>
+            <span className="lxm-date"><Icon name="calendar" />Sunday 1 November</span>
+            <span className="lxm-role">Manager</span>
+            <span className="lxm-user"><Icon name="user" /></span>
+          </div>
+
+          <div className="lxm-content">
+            <div className="lxm-hero">
+              <div className="lxm-hero-copy">
+                <b>Good evening, Khalid.</b>
+                <p>18 open tasks across your team.</p>
+                <div className="lxm-actions">
+                  <span className="lxm-btn-orange"><Icon name="team" />View my team</span>
+                  <span className="lxm-btn-line"><Icon name="tasks" />Open tasks</span>
+                </div>
+              </div>
+              <div className="lxm-chart">
+                <small>Open tasks by priority</small>
+                <div className="lxm-bars">
+                  {RISK_BARS.map(([label, value, level], index) => (
+                    <span key={label} className={`lxm-bar lxm-bar-${level}`} style={{ '--h': `${(value / 11) * 100}%`, animationDelay: `${1000 + index * 160}ms` }}>
+                      <b>{value}</b><i /><small>{label}</small>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="lxm-stats">
+              <div><b>4</b><small>Projects</small></div>
+              <div><b>18</b><small>Open tasks</small></div>
+              <div className="lxm-stat-alert"><b>2</b><small>High priority</small></div>
+              <div><b>0</b><small>Overdue</small></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="lx-float lx-float-alert" aria-hidden="true">
+        <span className="lx-pulse" />
+        <span><b>2 high-priority tasks</b><small>Review upcoming deadlines</small></span>
+      </div>
+      <div className="lx-float lx-float-suggest" aria-hidden="true">
+        <span className="lx-float-icon">✦</span>
+        <span><b>Suggested for “Fix bugs”: Nasser A.</b><small>Skills match · Estimated availability</small></span>
+        <span className="lx-float-btn">Review</span>
+      </div>
+    </div>
+  );
+}
+
+function Hero() {
+  const ref = useRef(null);
+  const onMove = (event) => {
+    const rect = ref.current.getBoundingClientRect();
+    ref.current.style.setProperty('--mx', `${event.clientX - rect.left}px`);
+    ref.current.style.setProperty('--my', `${event.clientY - rect.top}px`);
+  };
+
+  let word = 0;
+  return (
+    <section className="lx-hero" ref={ref} onMouseMove={onMove} aria-labelledby="lx-hero-title">
+      <div className="lx-hero-glow" aria-hidden="true" />
+      <div className="lx-grid-bg" aria-hidden="true" />
+
+      <div className="lx-wrap lx-hero-copy">
+        <span className="lx-badge lx-fade" style={{ animationDelay: '0ms' }}>
+          <span className="lx-badge-dot" /> Workforce insights + smart task recommendations
+        </span>
+        <h1 id="lx-hero-title" className="lx-h1">
+          {HEADLINE.map((text) => <span key={text} className="lx-word" style={{ animationDelay: `${120 + (word++) * 70}ms` }}>{text} </span>)}
+          {HEADLINE_ACCENT.map((text) => <span key={text} className="lx-word lx-accent" style={{ animationDelay: `${120 + (word++) * 70}ms` }}>{text} </span>)}
+        </h1>
+        <p className="lx-hero-lead lx-fade" style={{ animationDelay: '750ms' }}>
+          Bayyinah brings employee records, projects, tasks and goals into one workspace.
+          It supports task-assignment decisions and helps HR review burnout-related insights.
+        </p>
+        <div className="lx-actions lx-fade" style={{ animationDelay: '900ms' }}>
+          <a className="lx-btn lx-btn-primary" href="/setup">Set up your organization <span aria-hidden="true">→</span></a>
+          <a className="lx-btn lx-btn-ghost" href="/login">I already have an account</a>
+        </div>
+      </div>
+
+      <div className="lx-wrap lx-fade lx-hero-visual" style={{ animationDelay: '600ms' }}>
+        <HeroApp />
+      </div>
+    </section>
+  );
+}
+
+// ==================== Numbers ====================
+
+const FACTS = [
+  [67, 'of full-time employees feel burned out at work at least sometimes.'],
+  [48, 'of employees in the Middle East and North Africa felt a lot of stress the day before.'],
+  [14, 'of employees in the Middle East and North Africa feel engaged at work.'],
+];
+
+function Fact({ value, text, delay }) {
+  const [ref, inView] = useInView(0.4);
+  const shown = useCountUp(value, inView);
+  return (
+    <Reveal className="lx-fact" delay={delay}>
+      <strong ref={ref}>
+        <span className="lx-sr">{value}%</span>
+        <span aria-hidden="true">{shown}<small>%</small></span>
+      </strong>
+      <p>{text}</p>
+    </Reveal>
+  );
+}
+
+function Numbers() {
+  return (
+    <section className="lx-section lx-numbers" aria-labelledby="lx-numbers-title">
+      <div className="lx-wrap">
+        <Reveal className="lx-head lx-head-center">
+          <span className="lx-eyebrow">Why it matters</span>
+          <h2 id="lx-numbers-title" className="lx-h2">Workplace pressure is real. <span className="lx-accent">Better decisions need context.</span></h2>
+        </Reveal>
+        <div className="lx-facts">
+          {FACTS.map(([value, text], index) => <Fact key={text} value={value} text={text} delay={index * 120} />)}
+        </div>
+        <p className="lx-source">
+          Sources: Gallup,{' '}
+          <a href="https://www.gallup.com/workplace/237059/employee-burnout-part-main-causes.aspx" target="_blank" rel="noreferrer">Employee Burnout, Part 1</a>
+          {' '}(2018, nearly 7,500 full-time employees) and{' '}
+          <a href="https://www.gallup.com/file/workplace/697829/SOGW_Region_2025_MiddleEastAndNorthAfrica.pdf" target="_blank" rel="noreferrer">State of the Global Workplace</a>
+          {' '}(2025, Middle East and North Africa).
+        </p>
+      </div>
+    </section>
+  );
+}
+
+// ==================== Feature: burnout ====================
+
+const FACTORS = [
+  ['Overdue tasks', 90, '+31', 'up'],
+  ['Overtime hours', 66, '+22', 'up'],
+  ['Meeting load', 42, '+14', 'up'],
+  ['Days off taken', 24, '−8', 'down'],
+];
+
+function BurnoutCard() {
+  const [ref, inView] = useInView(0.35);
+  const score = useCountUp(82, inView, 1500);
+  return (
+    <div ref={ref} className={`lxm lxm-window lx-demo${inView ? ' is-in' : ''}`}>
+      <div className="lxm-profile">
+        <span className="lxm-av lxm-av-big" aria-hidden="true">LA</span>
+        <span className="lxm-profile-name"><b>Lama Alanazi</b><small>Backend Developer · IT</small></span>
+        <div className="lxm-tiles">
+          <div className="lxm-tile-risk"><small>Burnout risk</small><b>{score}%</b></div>
+          <div><small>Open tasks</small><b>5</b></div>
+          <div><small>Overdue</small><b>3</b></div>
+        </div>
+      </div>
+
+      <div className="lxm-card">
+        <div className="lxm-card-head"><b>Illustrative risk estimate</b><Example /></div>
+        <div className="lxm-risk-body">
+          <div className="lxm-ring" role="img" aria-label="Example burnout risk: 82 percent, high">
+            <svg viewBox="0 0 100 100" aria-hidden="true">
+              <circle className="lxm-ring-track" cx="50" cy="50" r="40" pathLength="100" />
+              <circle className="lxm-ring-value" cx="50" cy="50" r="40" pathLength="100" />
+            </svg>
+            <span aria-hidden="true"><b>{score}%</b><small>High risk</small></span>
+          </div>
+          <div className="lxm-factors">
+            <p>Sample explanatory factors</p>
+            {FACTORS.map(([name, width, value, dir], index) => (
+              <div className="lx-factor" key={name} style={{ '--d': `${400 + index * 140}ms` }}>
+                <span>{name}</span>
+                <span className="lxm-track"><i className={dir === 'up' ? 'lxm-fill-high' : 'lxm-fill-low'} style={{ '--w': `${width}%` }} /></span>
+                <em className={dir === 'up' ? 'lxm-text-high' : 'lxm-text-low'}>{value}</em>
+              </div>
+            ))}
+          </div>
+        </div>
+        <p className="lxm-note">Illustrative values only; not a live prediction or clinical diagnosis.</p>
+      </div>
+    </div>
+  );
+}
+
+// ==================== Feature: smart assignment ====================
+
+const CANDIDATES = [
+  ['NA', 'Nasser Alanazi', 'QA Engineer', 92, 'Best match', ['Django · advanced', 'Python · advanced'], 'Estimated available: 12h'],
+  ['FA', 'Fahad Alharthi', 'Mobile Developer', 74, 'Good match', ['Python · intermediate'], 'Estimated available: 8h'],
+];
+
+function AssignCard() {
+  const [ref, inView] = useInView(0.35);
+  return (
+    <div ref={ref} className={`lxm lxm-window lx-demo${inView ? ' is-in' : ''}`}>
+      <div className="lxm-card">
+        <div className="lxm-card-head"><b>Suggested assignees</b><Example /></div>
+        <div className="lxm-task">
+          <span className="lxm-task-name"><b>Fix bugs from the last release</b><small><Icon name="projects" />HR Portal v2 · Due 20 Nov</small></span>
+          <span className="lxm-pill lxm-pill-flag">⚑ High</span>
+        </div>
+        <div className="lxm-needs"><small>Needs</small><span className="lxm-skill">Python · intermediate</span><span className="lxm-skill">Django · intermediate</span></div>
+
+        <ol className="lxm-people">
+          {CANDIDATES.map(([initials, name, job, match, fit, skills, free], index) => (
+            <li key={name} className={`lx-candidate${index === 0 ? ' is-best' : ''}`} style={{ '--d': `${300 + index * 220}ms` }}>
+              <div className="lxm-person">
+                <span className="lxm-av" aria-hidden="true">{initials}</span>
+                <span className="lxm-person-name"><b>{name}</b><small>{job}</small></span>
+                <span className={`lxm-pill ${index === 0 ? 'lxm-pill-done' : 'lxm-pill-todo'}`}><i />{fit}</span>
+              </div>
+              <div className="lxm-person-body">
+                <div className="lxm-skills">{skills.map((skill) => <span key={skill} className="lxm-skill">{skill}</span>)}</div>
+                <div className="lx-match">
+                  <span className="lxm-track"><i className="lxm-fill-orange" style={{ '--w': `${match}%` }} /></span>
+                  <em>{match}%</em>
+                </div>
+                <small className="lxm-free">{free}</small>
+              </div>
+              {index === 0 && <span className="lxm-assign">Assign</span>}
+            </li>
+          ))}
+        </ol>
+
+        <div className="lx-excluded lxm-excluded" style={{ '--d': '800ms' }}>
+          <span className="lxm-av lxm-av-muted" aria-hidden="true">LA</span>
+          <span><b>Lama Alanazi</b> not eligible</span>
+          <span className="lxm-pill lxm-pill-todo"><i />Unavailable in task period</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Feature({ id, eyebrow, title, accent, lead, points, flip = false, children }) {
+  return (
+    <section className="lx-section" id={id} aria-labelledby={`${id}-title`}>
+      <div className={`lx-wrap lx-feature${flip ? ' lx-feature-flip' : ''}`}>
+        <Reveal className="lx-feature-copy">
+          <span className="lx-eyebrow">{eyebrow}</span>
+          <h2 id={`${id}-title`} className="lx-h2">{title} <span className="lx-accent">{accent}</span></h2>
+          <p className="lx-lead">{lead}</p>
+          <ul className="lx-points">
+            {points.map(([head, text]) => (
+              <li key={head}>
+                <span className="lx-check" aria-hidden="true">✓</span>
+                <span><b>{head}</b><small>{text}</small></span>
+              </li>
+            ))}
+          </ul>
+        </Reveal>
+        <Reveal className="lx-feature-visual" delay={120}>{children}</Reveal>
+      </div>
+    </section>
+  );
+}
+
+// ==================== Roles ====================
+
+const ROLES = [
+  ['HR', 'Support people with better information', 'Maintain employee records and review workforce and burnout-related information through dedicated HR views.', ['Employee records', 'Burnout management', 'Organization overview']],
+  ['Manager', 'Plan work with more context', 'Manage projects and tasks, follow goals, and review recommendations before assigning work.', ['Smart task assignment', 'Projects and tasks', 'Goals and KPIs']],
+  ['Employee', 'Stay connected to your work', 'View assigned tasks and goals, update task status, and follow your own progress.', ['My assigned tasks', 'Goals and progress', 'My work information']],
+];
+
+function Roles() {
+  return (
+    <section className="lx-section" id="roles" aria-labelledby="lx-roles-title">
+      <div className="lx-wrap">
+        <Reveal className="lx-head lx-head-center">
+          <span className="lx-eyebrow">For your team</span>
+          <h2 id="lx-roles-title" className="lx-h2">One workspace. <span className="lx-accent">Three views.</span></h2>
+          <p className="lx-lead">HR, managers and employees access different views based on their responsibilities.</p>
+        </Reveal>
+        <div className="lx-roles">
+          {ROLES.map(([role, title, text, list], index) => (
+            <Reveal as="article" key={role} className="lx-card lx-role" delay={index * 120} onMouseMove={trackSpotlight}>
+              <span className="lx-role-tag">{role}</span>
+              <h3>{title}</h3>
+              <p>{text}</p>
+              <ul>{list.map((item) => <li key={item}>{item}</li>)}</ul>
+            </Reveal>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ==================== Steps ====================
+
+const STEPS = [
+  ['Set up', 'HR adds employees or imports them using a CSV file, then invites users to join.'],
+  ['Organize work', 'Managers manage projects, goals and tasks, and review employee suggestions before assignment.'],
+  ['Review insights', 'HR reviews burnout assessments and predictive risk insights as support for follow-up, not diagnosis.'],
+];
+
+function Steps() {
+  const [ref, inView] = useInView(0.3);
+  return (
+    <section className="lx-section" id="how" aria-labelledby="lx-how-title">
+      <div className="lx-wrap">
+        <Reveal className="lx-head lx-head-center">
+          <span className="lx-eyebrow">How it works</span>
+          <h2 id="lx-how-title" className="lx-h2">Up and running in <span className="lx-accent">three steps.</span></h2>
+        </Reveal>
+        <ol ref={ref} className={`lx-steps${inView ? ' is-in' : ''}`}>
+          {STEPS.map(([title, text], index) => (
+            <li key={title} className="lx-step" style={{ '--d': `${index * 260}ms` }}>
+              <span className="lx-step-num" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
+              <h3>{title}</h3>
+              <p>{text}</p>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
+  );
+}
+
+// ==================== FAQ ====================
+
+const FAQ = [
+  ['How does Bayyinah support burnout management?', 'It combines BAT-based burnout assessment with a separate predictive risk estimate. These insights support HR review and are not medical diagnoses.'],
+  ['How are employees recommended for tasks?', 'Bayyinah considers required skills, relevant completed tasks and estimated availability during the selected dates. Availability is an estimate, not a guarantee that the task will fit.'],
+  ['Does Bayyinah assign tasks automatically?', 'No. It ranks suggested employees and provides reasons. The manager makes the final assignment decision.'],
+  ['Who can access information?', 'Access depends on role: HR handles organizational records and authorized HR insights, managers manage their teams, and employees access their own work.'],
+  ['How do employees join?', 'HR adds them one by one or imports a CSV file. Each person gets an email invitation and sets their own password.'],
+];
+
+function Faq() {
+  return (
+    <section className="lx-section" id="faq" aria-labelledby="lx-faq-title">
+      <div className="lx-wrap lx-faq">
+        <Reveal className="lx-head">
+          <span className="lx-eyebrow">FAQ</span>
+          <h2 id="lx-faq-title" className="lx-h2">Questions, <span className="lx-accent">answered.</span></h2>
+          <p className="lx-lead">The short version of how Bayyinah works.</p>
+        </Reveal>
+        <Reveal className="lx-faq-list" delay={120}>
+          {FAQ.map(([question, answer]) => (
+            <details key={question} className="lx-faq-item">
+              <summary>{question}<span className="lx-plus" aria-hidden="true" /></summary>
+              <p>{answer}</p>
+            </details>
+          ))}
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
+// ==================== Closing CTA ====================
+
+function Cta() {
+  return (
+    <section className="lx-section lx-cta-section" aria-labelledby="lx-cta-title">
+      <div className="lx-wrap">
+        <Reveal className="lx-cta" onMouseMove={trackSpotlight}>
+          <div className="lx-cta-glow" aria-hidden="true" />
+          <h2 id="lx-cta-title" className="lx-h2">Bring work together. <span className="lx-accent">Make informed decisions.</span></h2>
+          <p className="lx-lead">Connect your team, tasks and goals in one workspace.</p>
+          <div className="lx-actions">
+            <a className="lx-btn lx-btn-primary" href="/setup">Get started <span aria-hidden="true">→</span></a>
+            <a className="lx-btn lx-btn-ghost" href="/login">Log in</a>
+          </div>
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
+// ==================== Footer ====================
+
+const FOOTER_COLUMNS = [
+  ['Product', [['#burnout', 'Burnout insights'], ['#assign', 'Smart assignment'], ['#roles', 'For your team'], ['#how', 'How it works']]],
+  ['Help', [['#faq', 'FAQ'], ['/forgot-password', 'Reset password']]],
+  ['Account', [['/login', 'Log in'], ['/setup', 'Set up your organization']]],
+];
+
+function LxFooter() {
+  return (
+    <footer className="lx-footer">
+      <div className="lx-wrap lx-footer-grid">
+        <div className="lx-footer-brand">
+          <Brand small />
+          <p>One workspace for employees, projects, tasks and goals, with insights that support better workforce decisions.</p>
+        </div>
+        {FOOTER_COLUMNS.map(([title, links]) => (
+          <nav key={title} className="lx-footer-col" aria-label={title}>
+            <h3>{title}</h3>
+            {links.map(([href, text]) => <a key={href} href={href}>{text}</a>)}
+          </nav>
+        ))}
+      </div>
+      <div className="lx-wrap lx-footer-bottom">
+        <span>© 2026 Bayyinah. All rights reserved.</span>
+        <a href="#main">Back to top ↑</a>
+      </div>
+    </footer>
+  );
+}
+
+// ==================== Page ====================
+
+export function Home() {
+  return (
+    <div className="lx">
+      <LxHeader />
+      <main id="main" tabIndex={-1}>
+        <Hero />
+        <Numbers />
+        <Feature
+          id="burnout"
+          eyebrow="Burnout insights"
+          title="See burnout from"
+          accent="more than one angle."
+          lead="Bayyinah brings together BAT-based burnout assessment and a separate predictive risk estimate for HR review. Neither should be treated as a medical diagnosis."
+          points={[
+            ['BAT-based assessment', 'A structured survey captures employee-reported burnout experiences.'],
+            ['Predictive risk insights', 'A separate model estimates risk as an additional signal, not a confirmed condition.'],
+            ['HR-led review', 'Sensitive burnout information stays separate from routine task assignment.'],
+          ]}
+        >
+          <BurnoutCard />
+        </Feature>
+        <Feature
+          id="assign"
+          flip
+          eyebrow="Smart task assignment"
+          title="Find a good match"
+          accent="for each task."
+          lead="Bayyinah suggests employees from the manager’s team using required skills, relevant completed tasks and estimated availability during the task dates."
+          points={[
+            ['Checks required skills', 'Employees who do not meet mandatory skill requirements are excluded with a reason.'],
+            ['Uses estimated availability', 'Existing tasks, meetings and approved leave inform the ranking; time sufficiency for the new task is not guaranteed.'],
+            ['The manager decides', 'Review each suggestion and its reasons before assigning the task.'],
+          ]}
+        >
+          <AssignCard />
+        </Feature>
+        <Roles />
+        <Steps />
+        <Faq />
+        <Cta />
+      </main>
+      <LxFooter />
+    </div>
+  );
+}
+
+// ==================== Old header and footer ====================
+// The homepage no longer uses these. They stay exactly as before
+// in case another page (for example Auth.jsx) still imports them.
 
 const LINKS = [
   ['#burnout', 'Burnout insights'],
   ['#how', 'How it works'],
   ['#about', 'About us'],
-  ['#faq', 'Get to know us'],
+  ['#faq', 'FAQ'],
 ];
 
 export function SiteHeader() {
@@ -18,7 +683,7 @@ export function SiteHeader() {
           <span className="brand-word"><span className="brand-latin">Bayyinah</span><span className="brand-arabic" lang="ar" dir="rtl">بيّنة</span></span>
         </a>
         <nav className="site-nav" aria-label="Main navigation">
-          {LINKS.map(([href, text]) => <a key={href} className="nav-login mk-link" href={href}>{text}</a>)}
+          {LINKS.map(([href, text]) => <a key={href} className="nav-login mk-link" href={`/${href}`}>{text}</a>)}
           <a className="nav-login" href="/login">Log in</a>
           <a className="button button-primary button-small" href="/setup">Get started</a>
         </nav>
@@ -27,12 +692,9 @@ export function SiteHeader() {
   );
 }
 
-// ==================== SiteFooter ====================
-
 const LINKS_SiteFooter = [
-  ['#burnout', 'Burnout insights'],
-  ['#about', 'About us'],
-  ['#faq', 'Get to know us'],
+  ['/#burnout', 'Burnout insights'],
+  ['/#faq', 'FAQ'],
   ['/login', 'Log in'],
 ];
 
@@ -48,471 +710,5 @@ export function SiteFooter() {
       </nav>
       <span>© 2026 Bayyinah Platform. All rights reserved.</span>
     </footer>
-  );
-}
-
-// ==================== Home ====================
-
-function useReveal() {
-  const ref = useRef(null);
-  useEffect(() => {
-    const node = ref.current;
-    if (!node) return undefined;
-    if (!('IntersectionObserver' in window)) {
-      node.classList.add('in');
-      return undefined;
-    }
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) {
-        node.classList.add('in');
-        observer.disconnect();
-      }
-    }, { threshold: 0.15 });
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
-  return ref;
-}
-function useAnimatedNumber(target, duration = 1100) {
-  const [value, setValue] = useState(0);
-  const from = useRef(0);
-  useEffect(() => {
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduce) {
-      setValue(target);
-      from.current = target;
-      return undefined;
-    }
-    const start = performance.now();
-    const begin = from.current;
-    let frame;
-    const tick = (now) => {
-      const t = Math.min(1, (now - start) / duration);
-      const eased = 1 - (1 - t) ** 3;
-      const next = begin + (target - begin) * eased;
-      from.current = next;
-      setValue(next);
-      if (t < 1) frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [target, duration]);
-  return value;
-}
-
-function Reveal({ as: Tag = 'div', className = '', delay = 0, children, ...rest }) {
-  const ref = useReveal();
-  return (
-    <Tag ref={ref} className={`mk-reveal ${className}`} style={{ transitionDelay: `${delay}ms` }} {...rest}>
-      {children}
-    </Tag>
-  );
-}
-
-
-const POPS_TOP = [
-  ['✦', 'Role-based access', 'Relevant information for each role'],
-  ['!', 'Burnout risk rising', 'Omar K. is at 82% after 3 overdue tasks'],
-  ['↗', 'Workload imbalance', 'Engineering has 40% more open tasks'],
-];
-const POPS_BOTTOM = [
-  ['✓', 'Employee invited', 'Secure account setup is ready'],
-  ['✓', 'Risk reduced', 'Lina F. dropped to 24% after rebalancing'],
-  ['✦', 'Suggested assignee', 'Amal H. has capacity for this task'],
-];
-
-function FloatingPop({ items, className, offset = 0 }) {
-  const [index, setIndex] = useState(0);
-  useEffect(() => {
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduce) return undefined;
-    let timer;
-    const start = setTimeout(() => {
-      timer = setInterval(() => setIndex((value) => value + 1), 4200);
-    }, offset);
-    return () => {
-      clearTimeout(start);
-      clearInterval(timer);
-    };
-  }, [offset]);
-  const [icon, title, text] = items[index % items.length];
-  return (
-    <div className={`floating-card ${className}`} aria-hidden="true">
-      <div key={index} className="mk-pop">
-        <span className={icon === '✓' ? 'float-check' : 'float-icon'}>{icon}</span>
-        <span><b>{title}</b><small>{text}</small></span>
-      </div>
-    </div>
-  );
-}
-
-
-const SCENES = [
-  {
-    key: 'predict',
-    label: 'Predict',
-    sub: 'A risk level for every employee',
-    score: 82,
-    level: 'High risk',
-    note: 'Updated as work changes',
-  },
-  {
-    key: 'explain',
-    label: 'Explain',
-    sub: 'The reasons behind each score',
-    score: 82,
-    level: 'High risk',
-    note: 'Top factors behind the score',
-  },
-];
-
-const FACTORS = [
-  ['Overdue tasks', 90, '+31', 'up'],
-  ['Overtime hours', 66, '+22', 'up'],
-  ['Meeting load', 42, '+14', 'up'],
-  ['Days off taken', 24, '−8', 'down'],
-];
-
-function Gauge({ score }) {
-  const value = useAnimatedNumber(score);
-  const level = value >= 70 ? 'high' : value >= 40 ? 'med' : 'low';
-  // The needle is drawn with plain coordinates (no CSS transform), so it always shows.
-  const radians = Math.PI - (Math.min(100, value) / 100) * Math.PI;
-  const tipX = 110 + 76 * Math.cos(radians);
-  const tipY = 110 - 76 * Math.sin(radians);
-  return (
-    <div className={`mk-gauge mk-gauge-${level}`} role="img" aria-label={`Burnout risk ${score} percent`}>
-      <svg viewBox="0 0 220 125">
-        <defs>
-          <linearGradient id="mk-grad" gradientUnits="userSpaceOnUse" x1="20" x2="200" y1="0" y2="0">
-            <stop offset="0" stopColor="#2E9E6A" />
-            <stop offset="0.5" stopColor="#F07B1F" />
-            <stop offset="1" stopColor="#D64545" />
-          </linearGradient>
-        </defs>
-        <path d="M 20 110 A 90 90 0 0 1 200 110" fill="none" stroke="#EEEAF6" strokeWidth="18" strokeLinecap="round" />
-        <path d="M 20 110 A 90 90 0 0 1 200 110" fill="none" stroke="url(#mk-grad)" strokeWidth="18" strokeLinecap="round" opacity="0.95" />
-        <line x1="110" y1="110" x2={tipX} y2={tipY} stroke="#fff" strokeWidth="8" strokeLinecap="round" />
-        <line x1="110" y1="110" x2={tipX} y2={tipY} stroke="#2D1B4E" strokeWidth="4" strokeLinecap="round" />
-        <circle cx="110" cy="110" r="10" fill="#2D1B4E" stroke="#fff" strokeWidth="2" />
-        <circle cx="110" cy="110" r="3.5" fill="#fff" />
-      </svg>
-      <strong>{Math.round(value)}<span>%</span></strong>
-    </div>
-  );
-}
-
-function BurnoutScene() {
-  const [active, setActive] = useState(0);
-  const [paused, setPaused] = useState(false);
-  const scene = SCENES[active];
-
-  return (
-    <Reveal>
-    <div
-      className={`mk-burnout${paused ? ' is-paused' : ''}`}
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-    >
-      <div className="mk-tabs" role="tablist" aria-label="Burnout features">
-        {SCENES.map((item, index) => (
-          <button
-            key={item.key}
-            type="button"
-            role="tab"
-            className="mk-tab"
-            aria-selected={active === index}
-            onClick={() => setActive(index)}
-          >
-            <span className="mk-tab-num">{index + 1}</span>
-            <span className="mk-tab-text"><b>{item.label}</b><small>{item.sub}</small></span>
-            {active === index && (
-              <i
-                key={`${item.key}-${paused}`}
-                className="mk-tab-progress"
-                onAnimationEnd={() => setActive((value) => (value + 1) % SCENES.length)}
-              />
-            )}
-          </button>
-        ))}
-      </div>
-
-      <div className="mk-stage" role="tabpanel">
-        <div className="mk-stage-person">
-          <span className="mk-risk-avatar">OK</span>
-          <div><b>Omar Khalid</b><small>Operations</small></div>
-          <span className={`mk-level mk-level-${scene.score >= 70 ? 'high' : 'low'}`}>{scene.level}</span>
-        </div>
-
-        <div className="mk-stage-body">
-          <div className="mk-stage-gauge">
-            <Gauge score={scene.score} />
-            <p className="mk-stage-note" key={scene.key}>{scene.note}</p>
-          </div>
-
-          <div className="mk-stage-side" key={scene.key}>
-            {scene.key === 'predict' && (
-              <ul className="mk-people">
-                {[['Omar Khalid', 82, 'High'], ['Amal Hassan', 56, 'Medium'], ['Lina Faisal', 24, 'Low']].map(([name, value, level], index) => (
-                  <li key={name} style={{ animationDelay: `${index * 140}ms` }}>
-                    <span>{name}</span>
-                    <i><b className={`lv-${level.toLowerCase()}`} style={{ width: `${value}%`, animationDelay: `${index * 140 + 200}ms` }} /></i>
-                    <em>{level}</em>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {scene.key === 'explain' && (
-              <ul className="mk-factors">
-                {FACTORS.map(([name, width, value, dir], index) => (
-                  <li key={name} style={{ animationDelay: `${index * 160}ms` }}>
-                    <span>{name}</span>
-                    <i><b className={dir} style={{ width: `${width}%`, animationDelay: `${index * 160 + 200}ms` }} /></i>
-                    <em>{value}</em>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-    </Reveal>
-  );
-}
-
-
-function CountUp({ to, suffix = '%' }) {
-  const ref = useRef(null);
-  const [go, setGo] = useState(false);
-  useEffect(() => {
-    const node = ref.current;
-    if (!node || !('IntersectionObserver' in window)) {
-      setGo(true);
-      return undefined;
-    }
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) {
-        setGo(true);
-        observer.disconnect();
-      }
-    }, { threshold: 0.4 });
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
-  const value = useAnimatedNumber(go ? to : 0, 1400);
-  return <span ref={ref}>{Math.round(value)}{suffix}</span>;
-}
-
-const FACTS = [
-  [67, 'of full-time employees feel burned out at work at least sometimes (23% feel it very often or always)'],
-  [48, 'of employees in the Middle East and North Africa felt a lot of stress the previous day'],
-  [14, 'of employees in the Middle East and North Africa feel engaged at work'],
-];
-
-
-const STEPS = [
-  ['Set up', 'HR imports the team from a CSV file. Everyone gets a private invite.'],
-  ['Work together', 'Managers assign tasks and review progress. Employees update their status.'],
-  ['Act early', 'Bayyinah flags burnout risk with the reasons, so you can rebalance work.'],
-];
-
-const PILLARS = [
-  ['✦', 'Burnout prediction', 'A risk level for every employee, with the reasons behind it.'],
-  ['⇄', 'Fair workload', 'Assign tasks with each person’s capacity and skills in view.'],
-  ['◎', 'Goals and KPIs', 'Set goals, link them to tasks and track progress automatically.'],
-  ['▦', 'Clear dashboards', 'Compare workload and performance across departments.'],
-];
-
-const FAQ = [
-  ['What does burnout prediction do?', 'It estimates each employee’s burnout risk from work data like workload, tasks, meetings and attendance, and shows it as low, medium or high. It is a risk estimate, not a diagnosis.'],
-  ['Why is a person marked at risk?', 'Every score lists the top factors that raised or lowered it, so managers can see what to change.'],
-  ['Who sees what?', 'HR sees the organization, managers see their department, and employees see their own information.'],
-  ['How do employees join?', 'HR adds them one by one or imports a CSV file. Each person gets an email invitation and sets their own password.'],
-];
-
-export function Home() {
-  return (
-    <div className="marketing-page mk-page">
-      <SiteHeader />
-
-      <main id="main">
-        {/* ---------- Original hero ---------- */}
-        <section className="hero">
-          <div className="hero-copy">
-            <span className="pill"><span className="pill-dot" /> People operations, made clearer</span>
-            <h1>Bring your people and work <span>into focus.</span></h1>
-            <p>
-              Bayyinah brings HR professionals, managers, and employees together
-              in one welcoming, organized space. Work better as a team and stay
-              connected every step of the way.
-            </p>
-            <div className="hero-actions">
-              <a className="button button-primary" href="/setup">Set up your organization <span aria-hidden="true">→</span></a>
-              <a className="button button-quiet" href="/login">I already have an account</a>
-            </div>
-            <div className="hero-trust">
-              <span className="trust-check">✓</span>
-              Role-aware access
-              <span className="trust-separator">·</span>
-              Simple employee onboarding
-            </div>
-          </div>
-
-          <div className="hero-art" aria-label="Preview of an employee operations dashboard">
-            <div className="art-orbit orbit-one" />
-            <div className="art-orbit orbit-two" />
-            <div className="preview-window">
-              <div className="preview-topbar">
-                <div className="preview-brand"><img className="preview-logo" src="/bayyinah-logo.png" alt="" /> Bayyinah</div>
-                <div className="preview-avatar">HR</div>
-              </div>
-              <div className="preview-body">
-                <div className="preview-sidebar">
-                  <span className="side-active">Overview</span>
-                  <span>Dashboards</span>
-                  <span>Employees</span>
-                  <span>Departments</span>
-                  <span>Reports</span>
-                </div>
-                <div className="preview-main">
-                  <div className="preview-heading">
-                    <div><small>ILLUSTRATIVE WORKSPACE PREVIEW</small><strong>Your people overview</strong></div>
-                    <span className="preview-action">+ Add employee</span>
-                  </div>
-                  <div className="preview-metrics">
-                    <div><small>Total employees</small><strong>128</strong><i className="metric-line line-purple" /></div>
-                    <div><small>Departments</small><strong>8</strong><i className="metric-line line-orange" /></div>
-                    <div><small>Invitations</small><strong>12</strong><i className="metric-line line-green" /></div>
-                  </div>
-                  <div className="preview-table">
-                    <div className="table-title">Recent employees <span>View all</span></div>
-                    <div className="preview-person"><i className="person-dot dot-lilac" /><span><b>Amal Hassan</b><small>Engineering</small></span><em>Employee</em></div>
-                    <div className="preview-person"><i className="person-dot dot-peach" /><span><b>Omar Khalid</b><small>Operations</small></span><em className="role-manager">Manager</em></div>
-                    <div className="preview-person"><i className="person-dot dot-mint" /><span><b>Lina Faisal</b><small>People & Culture</small></span><em>Employee</em></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <FloatingPop items={POPS_TOP} className="float-top" />
-            <FloatingPop items={POPS_BOTTOM} className="float-bottom" offset={2100} />
-          </div>
-        </section>
-
-        {/* ---------- Original feature strip ---------- */}
-        <section className="feature-strip" aria-label="Platform benefits">
-          <article><span className="feature-icon feature-purple">◎</span><div><strong>Organized employee records</strong><p>Keep employee and department information together.</p></div></article>
-          <article><span className="feature-icon feature-orange">↗</span><div><strong>Role-based workspaces</strong><p>Give HR, managers, and employees relevant access.</p></div></article>
-          <article><span className="feature-icon feature-green">✳</span><div><strong>Guided onboarding</strong><p>Review imported records before sending invitations.</p></div></article>
-        </section>
-
-        {/* ---------- Burnout feature ---------- */}
-        <section className="mk-section" id="burnout">
-          <div className="mk-wrap">
-            <Reveal className="mk-head">
-              <span className="mk-eyebrow">New feature</span>
-              <h2 className="mk-h2">See burnout before it costs you <span>someone good.</span></h2>
-              <p className="mk-lead">Bayyinah predicts each employee’s burnout risk and shows the reasons behind it.</p>
-            </Reveal>
-            <BurnoutScene />
-          </div>
-        </section>
-
-        {/* ---------- Survey numbers ---------- */}
-        <section className="mk-facts" aria-label="Why it matters">
-          <div className="mk-wrap">
-            <div className="mk-facts-grid">
-              {FACTS.map(([value, text], index) => (
-                <Reveal className="mk-fact" key={text} delay={index * 120}>
-                  <strong><CountUp to={value} /></strong>
-                  <span>{text}</span>
-                </Reveal>
-              ))}
-            </div>
-            <p className="mk-source">
-              Sources: Gallup,{' '}
-              <a href="https://www.gallup.com/workplace/237059/employee-burnout-part-main-causes.aspx" target="_blank" rel="noreferrer">Employee Burnout, Part 1</a>
-              {' '}(2018, nearly 7,500 full-time employees); Gallup,{' '}
-              <a href="https://www.gallup.com/workplace/697904/state-of-the-global-workplace-global-data.aspx" target="_blank" rel="noreferrer">State of the Global Workplace</a>
-              {' '}(2025, Middle East and North Africa region).
-            </p>
-          </div>
-        </section>
-
-        {/* ---------- How it works ---------- */}
-        <section className="mk-section" id="how">
-          <div className="mk-wrap">
-            <Reveal className="mk-head">
-              <span className="mk-eyebrow">How it works</span>
-              <h2 className="mk-h2">Three steps to a healthier team.</h2>
-            </Reveal>
-            <div className="mk-steps">
-              {STEPS.map(([title, text], index) => (
-                <Reveal as="article" className="mk-step" key={title} delay={index * 120}>
-                  <span className="mk-step-num">{index + 1}</span>
-                  <h3>{title}</h3>
-                  <p>{text}</p>
-                </Reveal>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* ---------- About ---------- */}
-        <section className="mk-section mk-about" id="about">
-          <div className="mk-wrap">
-            <Reveal className="mk-head">
-              <span className="mk-eyebrow">About Bayyinah</span>
-              <h2 className="mk-h2">One workspace for work and wellbeing.</h2>
-              <p className="mk-lead">
-                Bayyinah helps HR teams and managers understand how work affects people,
-                and step in early when it starts to hurt.
-              </p>
-            </Reveal>
-            <div className="mk-pillars">
-              {PILLARS.map(([icon, title, text], index) => (
-                <Reveal as="article" className="mk-pillar" key={title} delay={index * 100}>
-                  <span className="mk-pillar-icon" aria-hidden="true">{icon}</span>
-                  <h3>{title}</h3>
-                  <p>{text}</p>
-                </Reveal>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* ---------- FAQ ---------- */}
-        <section className="mk-section" id="faq">
-          <div className="mk-wrap mk-faq">
-            <Reveal className="mk-head">
-              <span className="mk-eyebrow">Get to know us</span>
-              <h2 className="mk-h2">Questions to get to know us better.</h2>
-            </Reveal>
-            <Reveal className="mk-faq-list" delay={120}>
-              {FAQ.map(([question, answer]) => (
-                <details className="mk-faq-item" key={question}>
-                  <summary>{question}</summary>
-                  <p>{answer}</p>
-                </details>
-              ))}
-            </Reveal>
-          </div>
-        </section>
-
-        {/* ---------- Closing call to action ---------- */}
-        <div className="mk-wrap">
-          <Reveal as="section" className="mk-cta">
-            <h2>Spot burnout before it spreads.</h2>
-            <p>Set up your organization in minutes.</p>
-            <div className="hero-actions">
-              <a className="button button-orange" href="/setup">Get started <span aria-hidden="true">→</span></a>
-              <a className="button mk-cta-quiet" href="/login">Log in</a>
-            </div>
-          </Reveal>
-        </div>
-      </main>
-
-      <SiteFooter />
-    </div>
   );
 }
