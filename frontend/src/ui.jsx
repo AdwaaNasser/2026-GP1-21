@@ -1399,32 +1399,19 @@ export function Shell({ role, title, subtitle, breadcrumbs = [], children }) {
             {children}
           </main>
         </div>
-        <footer className="ws-footer">
-          <div className="ws-footer-grid">
-            <div className="ws-footer-about">
-              <a className="brand brand-light" href="/" aria-label="Bayyinah home">
-                <img className="brand-logo" src="/bayyinah-logo.png" alt="" />
-                <span className="brand-word">
-                  <span className="brand-latin">Bayyinah</span>
-                  <span className="brand-arabic" lang="ar" dir="rtl">بيّنة</span>
-                </span>
-              </a>
-              <p>Tasks, goals, skills and burnout insights for HR, managers and employees, in one place.</p>
-            </div>
-            <nav className="ws-footer-col" aria-label="Footer">
-              <h4>Your workspace</h4>
-              {items.map(([path, text]) => <a key={path} href={path}>{text}</a>)}
-            </nav>
-            <div className="ws-footer-col">
-              <h4>Account</h4>
-              <span>{displayName(login.user)}</span>
-              <span>{login.user.email}</span>
-              <button type="button" onClick={logout}>Log out</button>
-            </div>
-          </div>
-          <div className="ws-footer-base">
-            <span>© 2026 Bayyinah Platform. All rights reserved.</span>
-            <span>Secure access for your organization</span>
+        <footer className="ws-footer ws-footer-slim">
+          <span className="ws-footer-copy">© 2026 Bayyinah Platform. All rights reserved.</span>
+          <a className="brand brand-light ws-footer-brand" href="/" aria-label="Bayyinah home">
+            <img className="brand-logo" src="/bayyinah-logo.png" alt="" />
+            <span className="brand-word">
+              <span className="brand-latin">Bayyinah</span>
+              <span className="brand-arabic" lang="ar" dir="rtl">بيّنة</span>
+            </span>
+          </a>
+          <div className="ws-footer-account">
+            <strong>Account</strong>
+            <span>{displayName(login.user)}</span>
+            <span>{login.user.email}</span>
           </div>
         </footer>
       </div>
