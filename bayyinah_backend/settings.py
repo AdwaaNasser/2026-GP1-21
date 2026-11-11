@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     'workspace',
     'goals',
     'recommendations',
+    'burnout',
 ]
 
 MIDDLEWARE = [

@@ -21,4 +21,5 @@ urlpatterns = [
     path('api/workspace/', include('workspace.urls')),
     path('api/goals/', include('goals.urls')),
     path('api/recommendations/', include('recommendations.urls')),
+    path('api/burnout/', include('burnout.urls')),
 ]
