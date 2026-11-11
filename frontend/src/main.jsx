@@ -2,6 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { SetPassword, Login, OrgSetup, ForgotPassword, ResetPassword } from './Auth.jsx';
 import { Dashboard, DashboardRouter } from './Dashboard.jsx';
+import { EmployeeWellbeing, HRBurnout, ManagerBurnout } from './Burnout.jsx';
 import { Home } from './Home.jsx';
 import { EmployeePerformance, HRPerformance, ManagerGoals } from './Performance.jsx';
 import { HrTeam, ManagerTeam } from './Team.jsx';
@@ -24,9 +25,12 @@ const pages = {
   '/manager/tasks': ManagerTasks,
   '/manager/goals': ManagerGoals,
   '/manager/team': ManagerTeam,
+  '/manager/burnout': ManagerBurnout,
   '/employee/tasks': EmployeeTasks,
   '/employee/performance': EmployeePerformance,
+  '/employee/wellbeing': EmployeeWellbeing,
   '/hr/performance': HRPerformance,
+  '/hr/burnout': HRBurnout,
   '/hr/team': HrTeam,
   '/hr/employees': HrTeam, // the old Manage employees page now lives in Import team
   '/employee/project': () => <ProjectDetails role="Employee" />,

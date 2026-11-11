@@ -223,6 +223,8 @@ const PATHS = {
   alert: (<><circle cx="12" cy="12" r="10" /><path d="M12 8v4" /><path d="M12 16h.01" /></>),
   chevron: (<path d="m9 18 6-6-6-6" />),
   clock: (<><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></>),
+  heart: (<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />),
+  pulse: (<path d="M22 12h-4l-3 9L9 3l-3 9H2" />),
   flag: (<><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><path d="M4 22v-7" /></>),
   back: (<><path d="m12 19-7-7 7-7" /><path d="M19 12H5" /></>),
 };
@@ -1231,17 +1233,20 @@ const LINKS = {
     ['/manager/projects', 'Projects', 'folder'],
     ['/manager/tasks', 'Tasks', 'tasks'],
     ['/manager/team', 'My team', 'users'],
+    ['/manager/burnout', 'Burnout risk', 'pulse'],
     ['/manager/goals', 'Performance', 'flag'],
   ],
   Employee: [
     ['/dashboard/employee', 'Overview', 'layout'],
     ['/employee/tasks', 'My tasks', 'tasks'],
     ['/employee/performance', 'Performance', 'flag'],
+    ['/employee/wellbeing', 'Well-being', 'heart'],
   ],
   HR: [
     ['/dashboard/hr', 'Overview', 'layout'],
     ['/hr/team', 'Employees', 'users'],
     ['/hr/performance', 'Performance', 'flag'],
+    ['/hr/burnout', 'Burnout risk', 'pulse'],
   ],
 };
 
