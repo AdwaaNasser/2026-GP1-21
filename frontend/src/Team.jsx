@@ -22,12 +22,13 @@ import {
 const BATCH_KEY = 'bayyinahCsvImportV3';
 const ROLES = ['HR Professional', 'Employee', 'Manager'];
 const GENDERS = ['Male', 'Female'];
+const SENIORITY_LEVELS = ['Junior', 'Mid', 'Senior', 'Lead', 'Principal', 'Manager'];
 
 const CSV_TEMPLATE = [
-  'email,first_name,last_name,role,job_title,gender,department,hire_date,allowed_absence_days,manager_email',
-  'sara@example.com,Sara,Alharbi,Employee,Software Engineer,Female,Engineering,2024-01-15,21,omar@example.com',
-  'omar@example.com,Omar,Khalid,Manager,Operations Manager,Male,Operations,2022-03-01,21,',
-  'lina@example.com,Lina,Faisal,HR Professional,HR Specialist,Female,People,2021-06-10,21,',
+  'email,first_name,last_name,role,job_title,seniority_level,gender,department,hire_date,allowed_absence_days,manager_email',
+  'sara@example.com,Sara,Alharbi,Employee,Software Engineer,Mid,Female,Engineering,2024-01-15,21,omar@example.com',
+  'omar@example.com,Omar,Khalid,Manager,Operations Manager,Manager,Male,Operations,2022-03-01,21,',
+  'lina@example.com,Lina,Faisal,HR Professional,HR Specialist,Senior,Female,People,2021-06-10,21,',
 ].join('\n');
 
 function downloadTemplate() {
@@ -51,6 +52,7 @@ function PersonForm({ person, departments, managers, onSubmit, onCancel }) {
           email: person.email,
           role: person.role_label,
           job_title: person.job_title || '',
+          seniority_level: person.seniority_level || '',
           gender: person.gender || '',
           hire_date: person.hire_date || '',
           allowed_absence_days: String(person.allowed_absence_days ?? ''),
@@ -63,6 +65,7 @@ function PersonForm({ person, departments, managers, onSubmit, onCancel }) {
           email: '',
           role: 'Employee',
           job_title: '',
+          seniority_level: '',
           gender: '',
           hire_date: '',
           allowed_absence_days: '',
@@ -85,6 +88,7 @@ function PersonForm({ person, departments, managers, onSubmit, onCancel }) {
         first_name: form.first_name.trim(),
         last_name: form.last_name.trim(),
         job_title: form.job_title.trim(),
+        seniority_level: form.seniority_level,
         gender: form.gender,
         hire_date: form.hire_date,
         allowed_absence_days: Number(form.allowed_absence_days),
@@ -138,6 +142,13 @@ function PersonForm({ person, departments, managers, onSubmit, onCancel }) {
         <label className="ws-field">
           <span className="ws-label">Job title</span>
           <input className="ws-input" value={form.job_title} maxLength={255} required placeholder="e.g. Senior Network Engineer" onChange={(e) => setField('job_title', e.target.value)} />
+        </label>
+        <label className="ws-field">
+          <span className="ws-label">Seniority level <span className="ws-optional">(optional)</span></span>
+          <select className="ws-select" value={form.seniority_level} onChange={(e) => setField('seniority_level', e.target.value)}>
+            <option value="">Not set</option>
+            {SENIORITY_LEVELS.map((level) => <option key={level} value={level}>{level}</option>)}
+          </select>
         </label>
       </div>
 
@@ -267,7 +278,7 @@ function CsvImport({ onImported, success, failure }) {
           <p>
             Every row needs: email, first_name, last_name, role (Employee, Manager or HR Professional),
             gender (Male or Female), hire_date (YYYY-MM-DD) and allowed_absence_days. job_title (free text, for example
-            Senior Network Engineer). Department is needed
+            Senior Network Engineer). seniority_level is optional (Junior, Mid, Senior, Lead, Principal or Manager). Department is needed
             for employees and managers. Employees should have manager_email, the email of their direct manager (list the manager on an earlier row, or use a manager who already exists). Review the summary, then send the invitations.
           </p>
         </div>

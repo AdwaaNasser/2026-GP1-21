@@ -4,28 +4,31 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.models import Employee
-from goals.permissions import IsHR, IsManager, is_hr
+from goals.permissions import IsHR, IsManager
 from workspace.permissions import is_employee, is_manager
 
 from . import bat, services, surveys
 
 
-class IsManagerOrHR(IsAuthenticated):
-    message = 'Only managers and HR professionals can view burnout predictions.'
+class IsManagerOnly(IsAuthenticated):
+    message = (
+        "Only managers can view an employee's burnout prediction. "
+        'HR sees department-level results only.'
+    )
 
     def has_permission(self, request, view):
         if not super().has_permission(request, view):
             return False
-        return is_manager(request.user) or is_hr(request.user)
+        return is_manager(request.user)
 
 
 class BurnoutPredictionView(APIView):
     """GET /api/burnout/prediction/<employee_id>/
 
-    Manager: only employees of their own team. HR: any employee.
-    Reads only, writes nothing."""
+    Manager: only employees of their own team. HR gets 403 (HR sees the
+    department totals only). Reads only, writes nothing."""
 
-    permission_classes = [IsManagerOrHR]
+    permission_classes = [IsManagerOnly]
 
     def get(self, request, employee_id):
         employee = services.can_view(request.user, employee_id)

@@ -61,11 +61,14 @@ class ViewTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(KEYS | {'employee'}, set(response.data))
 
-    def test_hr_allowed(self):
+    def test_hr_is_forbidden(self):
         user = SimpleNamespace(role='HR', is_authenticated=True, pk=9)
-        with patch('burnout.views.is_manager', return_value=False), \
-                patch('burnout.views.services.can_view', return_value=self.employee()):
-            self.assertEqual(self.call(user).status_code, 200)
+        with patch('burnout.views.is_manager', return_value=False):
+            self.assertEqual(self.call(user).status_code, 403)
+
+    def test_can_view_refuses_hr(self):
+        hr = SimpleNamespace(role='HR', pk=1)
+        self.assertIsNone(services.can_view(hr, 5))
 
 
 class BatScoringTests(SimpleTestCase):

@@ -22,7 +22,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import Employee, Manager, Organization, User
+from .models import SENIORITY_LEVELS, Employee, Manager, Organization, User
 from .permissions import IsHRProfessional
 
 
@@ -88,6 +88,7 @@ def _create_account(
     gender=None,
     allowed_absence_days=None,
     job_title=None,
+    seniority_level=None,
     manager=None,
 ):
     user = User.objects.create_user(
@@ -96,6 +97,7 @@ def _create_account(
         first_name=first_name,
         last_name=last_name,
         job_title=job_title,
+        seniority_level=seniority_level,
         org=organization,
         department=department,
         gender=gender,
@@ -169,6 +171,7 @@ def _employee_data(user):
         'role': user.role,
         'role_label': user.get_role_display(),
         'job_title': user.job_title or '',
+        'seniority_level': user.seniority_level or '',
         'gender': user.gender or '',
         'invitation_pending': _invitation_pending(user),
         'hire_date': _hire_date_of(user),
@@ -179,6 +182,20 @@ def _employee_data(user):
             'name': user.department or '',
         },
     }
+
+
+def _clean_seniority(value):
+    """Seniority is optional. Blank means not set; anything else must be one
+    of the allowed levels (any letter case)."""
+    text = str(value or '').strip()
+    if not text:
+        return None
+    for level, _ in SENIORITY_LEVELS:
+        if level.casefold() == text.casefold():
+            return level
+    raise serializers.ValidationError(
+        'Seniority level must be Junior, Mid, Senior, Lead, Principal or Manager.'
+    )
 
 
 def _normalize_csv_header(header):
@@ -197,6 +214,8 @@ def _normalize_csv_header(header):
         'department_name': 'department',
         'title': 'job_title',
         'jobtitle': 'job_title',
+        'seniority': 'seniority_level',
+        'level': 'seniority_level',
         'hiredate': 'hire_date',
         'role_name': 'role',
         'system_role': 'role',
@@ -431,6 +450,7 @@ class CSVEmployeeImportView(APIView):
             'last_name',
             'role',
             'job_title',
+            'seniority_level',
             'manager_email',
             'department',
             'gender',
@@ -506,6 +526,7 @@ class CSVEmployeeImportView(APIView):
                     raise serializers.ValidationError(
                         'Job title must be 255 characters or fewer.'
                     )
+                seniority = _clean_seniority(row.get('seniority_level'))
                 if email.casefold() in seen_emails:
                     raise serializers.ValidationError(
                         'This email appears more than once in the CSV.'
@@ -533,6 +554,7 @@ class CSVEmployeeImportView(APIView):
                     'last_name': last_name,
                     'role': role,
                     'job_title': row.get('job_title') or None,
+                    'seniority_level': seniority,
                     'manager_email': row.get('manager_email') or None,
                     'department': row.get('department') or None,
                     'gender': row.get('gender') or None,
@@ -565,6 +587,7 @@ class CSVEmployeeImportView(APIView):
                         password=None,
                         role=row['role'],
                         job_title=row['job_title'],
+                        seniority_level=row['seniority_level'],
                         manager=manager,
                         organization=request.user.org,
                         department=row['department'],
@@ -749,6 +772,14 @@ class TeamInviteView(APIView):
             )
 
         try:
+            seniority = _clean_seniority(request.data.get('seniority_level'))
+        except serializers.ValidationError as error:
+            return Response(
+                {'seniority_level': error.detail[0]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
             with transaction.atomic():
                 user, _ = _create_account(
                     email=email,
@@ -760,6 +791,7 @@ class TeamInviteView(APIView):
                     hire_date=hire_date,
                     department=department,
                     job_title=job_title,
+                    seniority_level=seniority,
                     manager=manager,
                 )
                 _send_invitation_email(user)
@@ -863,6 +895,12 @@ class EmployeeDetailView(APIView):
             ),
             'hire_date': serializers.DateField(required=False),
             'job_title': serializers.CharField(max_length=255, required=False),
+            'seniority_level': serializers.ChoiceField(
+                choices=SENIORITY_LEVELS,
+                required=False,
+                allow_blank=True,
+                allow_null=True,
+            ),
             'manager_id': serializers.IntegerField(required=False, allow_null=True),
         }
         invalid_fields = set(request.data) - set(fields)
@@ -902,6 +940,8 @@ class EmployeeDetailView(APIView):
                 {'job_title': 'Enter a job title.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        if 'seniority_level' in data:
+            data['seniority_level'] = data['seniority_level'] or None
         for field, value in data.items():
             setattr(user, field, value)
         user.save()

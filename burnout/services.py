@@ -57,11 +57,10 @@ def predict(employee):
 
 
 def can_view(user, employee_id):
-    """HR sees everyone; a manager sees only their own team."""
-    from accounts.models import Employee
-
-    if user.role == 'HR':
-        return Employee.objects.filter(pk=employee_id).select_related('user').first()
+    """A manager sees only their own team. HR never sees one person's result:
+    HR works with the department totals only (see departments_for_org)."""
+    if user.role != 'Manager':
+        return None
     return team_of(user).filter(pk=employee_id).first()
 
 

@@ -55,6 +55,17 @@ class UserManager(BaseUserManager):
         return user
 
 
+# Chosen by HR. Same values as the burnout dataset, used as a model input.
+SENIORITY_LEVELS = [
+    ('Junior', 'Junior'),
+    ('Mid', 'Mid'),
+    ('Senior', 'Senior'),
+    ('Lead', 'Lead'),
+    ('Principal', 'Principal'),
+    ('Manager', 'Manager'),
+]
+
+
 class User(AbstractBaseUser):
     user_id = models.AutoField(primary_key=True)
     password = models.CharField(max_length=255, db_column='password_hash')
@@ -64,6 +75,12 @@ class User(AbstractBaseUser):
     last_name = models.CharField(max_length=255, blank=True, null=True)
     gender = models.CharField(max_length=50, blank=True, null=True)
     job_title = models.CharField(max_length=255, blank=True, null=True)
+    seniority_level = models.CharField(
+        max_length=20,
+        choices=SENIORITY_LEVELS,
+        blank=True,
+        null=True,
+    )
     allowed_absence_days = models.IntegerField(blank=True, null=True)
     department = models.CharField(max_length=255, blank=True, null=True)
     org = models.ForeignKey(

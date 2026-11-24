@@ -7,6 +7,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db.models import Q
 from django.test import SimpleTestCase
+from rest_framework import serializers as drf_serializers
 from rest_framework.test import APIRequestFactory, force_authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 
@@ -714,6 +715,24 @@ class AccountApiTests(SimpleTestCase):
         )
         create_manager.assert_called_once_with(user=user)
 
+    def test_clean_seniority_accepts_levels_in_any_case_and_blank(self):
+        from .views import _clean_seniority
+        self.assertIsNone(_clean_seniority(None))
+        self.assertIsNone(_clean_seniority('  '))
+        self.assertEqual(_clean_seniority('senior'), 'Senior')
+        self.assertEqual(_clean_seniority(' LEAD '), 'Lead')
+        with self.assertRaises(drf_serializers.ValidationError):
+            _clean_seniority('Boss')
+
+    def test_seniority_level_is_optional_on_the_user(self):
+        field = User._meta.get_field('seniority_level')
+        self.assertTrue(field.null)
+        self.assertTrue(field.blank)
+        self.assertEqual(
+            [value for value, _ in field.choices],
+            ['Junior', 'Mid', 'Senior', 'Lead', 'Principal', 'Manager'],
+        )
+
     def test_employee_update_saves_hire_date_on_employee(self):
         request = self.factory.patch(
             '/api/accounts/employees/33/',
@@ -729,6 +748,7 @@ class AccountApiTests(SimpleTestCase):
             last_name='One',
             role='Employee',
             job_title='Analyst',
+            seniority_level=None,
             gender='',
             employee_record=employee_record,
             allowed_absence_days=0,
@@ -756,7 +776,7 @@ class AccountApiTests(SimpleTestCase):
         employee_record = SimpleNamespace(hire_date=None, manager=None, save=MagicMock())
         user = SimpleNamespace(
             pk=33, email='person@example.com', first_name='Person', last_name='One',
-            role='Employee', job_title='Analyst', gender='', employee_record=employee_record,
+            role='Employee', job_title='Analyst', seniority_level=None, gender='', employee_record=employee_record,
             allowed_absence_days=0, department=None, save=MagicMock(),
             get_role_display=lambda: 'Employee',
         )
