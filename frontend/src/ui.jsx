@@ -1246,7 +1246,6 @@ const LINKS = {
     ['/dashboard/hr', 'Overview', 'layout'],
     ['/hr/team', 'Employees', 'users'],
     ['/hr/performance', 'Performance', 'flag'],
-    ['/hr/burnout', 'Burnout risk', 'pulse'],
   ],
 };
 
