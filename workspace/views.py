@@ -396,6 +396,13 @@ class TaskDetailView(APIView):
         task = self.get_task(request, task_id)
         if task is None:
             return not_found('Task not found.')
+        # A completed task counts toward KPI progress and the experience history
+        # the recommendations use, so it is kept (same rule as deleting a project).
+        if task.status == COMPLETED:
+            return Response(
+                {'detail': 'This task is completed, so it cannot be deleted. Completed tasks count toward employees\' KPI goals and experience history.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         # Deleting the task removes its task_goal links (CASCADE), which changes
         # the progress of Task-based goals, so their scores are recalculated.
         with transaction.atomic():

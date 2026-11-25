@@ -605,7 +605,7 @@ class GoalLinkedTaskTests(WorkspaceApiTestCase):
             data = self.client.get(self.task_url(self.pub1)).data
             self.assertEqual(data['linked_goals'], [])
 
-    def test_completed_task_cannot_be_edited_but_can_still_be_deleted(self):
+    def test_completed_task_cannot_be_edited_or_deleted(self):
         self.login(self.manager1)
         url = self.task_url(self.pub1)
         self.assertFalse(self.client.get(url).data['can_edit'])
@@ -614,9 +614,16 @@ class GoalLinkedTaskTests(WorkspaceApiTestCase):
         self.pub1.refresh_from_db()
         self.assertEqual(self.pub1.title, 'pub1')
         self.assertTrue(self.client.get(self.task_url(self.priv1)).data['can_edit'])
+        # A completed task counts toward KPI progress and experience history: it is kept.
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('completed', response.data['detail'])
+        self.assertTrue(Task.objects.filter(pk=self.pub1.pk).exists())
 
     def test_deleting_a_linked_task_keeps_the_goal_and_refreshes_its_score(self):
         self.login(self.manager1)
+        # Only a task that is not completed can be deleted; make the linked one pending.
+        Task.objects.filter(pk=self.pub1.pk).update(status='in_progress')
         response = self.client.delete(self.task_url(self.pub1))
         self.assertEqual(response.status_code, 204)
         self.assertFalse(Task.objects.filter(pk=self.pub1.pk).exists())

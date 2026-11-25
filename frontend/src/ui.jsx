@@ -959,9 +959,12 @@ export function TaskPanel({ task, role, onEdit, onAdvance, onReview, onDelete, p
 
       {confirmingDelete && (
         <ConfirmDialog
-          title={linkedGoals.length ? 'Delete a task linked to goals?' : 'Delete task'}
+          title={task.status === 'completed' ? 'This task cannot be deleted' : linkedGoals.length ? 'Delete a task linked to goals?' : 'Delete task'}
+          cancelLabel={task.status === 'completed' ? 'Close' : 'Cancel'}
           message={
-            linkedGoals.length
+            task.status === 'completed'
+              ? "This task is completed, so it cannot be deleted. Completed tasks count toward employees' KPI goals and experience history."
+              : linkedGoals.length
               ? `"${task.title}" counts toward ${goalCount(linkedGoals)}. Deleting it removes it from ${linkedGoals.length === 1 ? 'that goal' : 'those goals'}, which may lower their progress and rating. This cannot be undone.`
               : `Delete "${task.title}"? This cannot be undone.`
           }
@@ -970,9 +973,9 @@ export function TaskPanel({ task, role, onEdit, onAdvance, onReview, onDelete, p
           busy={busy}
           error={deleteError}
           onCancel={cancelDelete}
-          onConfirm={confirmDelete}
+          onConfirm={task.status === 'completed' ? undefined : confirmDelete}
         >
-          <LinkedGoalList goals={linkedGoals} />
+          {task.status !== 'completed' && <LinkedGoalList goals={linkedGoals} />}
         </ConfirmDialog>
       )}
     </div>
