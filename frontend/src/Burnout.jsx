@@ -2,49 +2,125 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { displayName } from './api.js';
 import { Avatar, Banner, EmptyState, Icon, Shell, Stats, TableSkeleton, formatDate, getJson, sendJson, useBanner } from './ui.jsx';
 
-// BAT-12, work-related version (Schaufeli, De Witte & Desart, 2019).
-// The order matters: the backend scores items 1-3 as exhaustion, 4-6 mental
-// distance, 7-9 cognitive impairment and 10-12 emotional impairment.
-const QUESTIONS = [
-  'At work, I feel mentally exhausted',
-  'After a day at work, I find it hard to recover my energy',
-  'At work, I feel physically exhausted',
-  'I struggle to find any enthusiasm for my work',
-  'I feel a strong aversion towards my job',
-  "I'm cynical about what my work means to others",
-  'At work, I have trouble staying focused',
-  "When I'm working, I have trouble concentrating",
-  'I make mistakes in my work because I have my mind on other things',
-  'At work, I feel unable to control my emotions',
-  'I do not recognize myself in the way I react emotionally at work',
-  'At work I may overreact unintentionally',
-];
+import { LANGUAGES, TEXT } from './surveyText.js';
 
-const CHOICES = ['Never', 'Rarely', 'Sometimes', 'Often', 'Always'];
+// The survey text (BAT-12 items, answers, the questions of the model and the
+// interface words) is in surveyText.js in English and Arabic.
+const LANGUAGE_KEY = 'bayyinah-survey-language';
 
-// TODO: the final consent wording comes from the team (who can see the answers).
-const CONSENT_TEXT = 'I understand that this survey measures burnout symptoms at work, that it is not a medical diagnosis, and I agree to answer it.';
+function savedLanguage() {
+  try {
+    const code = window.localStorage.getItem(LANGUAGE_KEY);
+    return TEXT[code] ? code : 'en';
+  } catch {
+    return 'en';
+  }
+}
 
 // Shown instead of the questions once the survey was sent for this period.
 // The employee never sees a score.
-function Submitted({ status }) {
+function Submitted({ status, t }) {
   return (
     <section className="ws-card bat-done">
       <span className="bat-done-icon"><Icon name="check" size={26} /></span>
       <div>
-        <h3>Survey submitted</h3>
-        <p>Thank you. You answered on {formatDate(status.submitted_on)}.</p>
-        {status.next_available && <p className="bat-done-next">The next survey opens on {formatDate(status.next_available)}.</p>}
+        <h3>{t.doneTitle}</h3>
+        <p>{t.doneThanks(formatDate(status.submitted_on))}</p>
+        {status.next_available && <p className="bat-done-next">{t.doneNext(formatDate(status.next_available))}</p>}
       </div>
     </section>
+  );
+}
+
+// One extra question (the questions come from the backend: GET /api/burnout/bat/questions/).
+// Whole numbers use small squares (a number with + and - buttons when there are more
+// than MAX_SQUARES numbers, e.g. vacation days 0-30), hours of sleep a number box,
+// yes/no two buttons.
+const MAX_SQUARES = 13;
+function ExtraQuestion({ question, value, missing, onChange, t }) {
+  const id = `extra-${question.key}`;
+  let control;
+  if (question.kind === 'bool') {
+    control = (
+      <div className="bat-yesno" role="radiogroup" aria-labelledby={`${id}-label`}>
+        {[[t.yes, true], [t.no, false]].map(([label, choice]) => (
+          <label className="bat-opt" key={label}>
+            <input type="radio" name={id} checked={value === choice} onChange={() => onChange(choice)} />
+            <span>{label}</span>
+          </label>
+        ))}
+      </div>
+    );
+  } else if (question.kind === 'decimal') {
+    control = (
+      <input
+        className="bat-number"
+        type="number"
+        inputMode="decimal"
+        min={question.min}
+        max={question.max}
+        step="0.5"
+        placeholder={t.example}
+        value={value ?? ''}
+        onChange={(event) => onChange(event.target.value === '' ? null : Number(event.target.value))}
+        aria-labelledby={`${id}-label`}
+      />
+    );
+  } else {
+    const numbers = Array.from({ length: question.max - question.min + 1 }, (_, i) => question.min + i);
+    if (numbers.length <= MAX_SQUARES) {
+      // Small ranges (1-10, 0-7, 0-12): one small square per number, like the BAT answers.
+      control = (
+        <div className="bat-scale bat-scale-num" style={{ '--n': numbers.length }} role="radiogroup" aria-labelledby={`${id}-label`}>
+          {numbers.map((number) => (
+            <label className="bat-opt" key={number}>
+              <input type="radio" name={id} value={number} checked={value === number} onChange={() => onChange(number)} />
+              <span>{number}</span>
+            </label>
+          ))}
+        </div>
+      );
+    } else {
+      // Many numbers (vacation days 0-30): a number that goes up and down with the buttons.
+      const change = (step) => onChange(Math.min(question.max, Math.max(question.min, (value ?? question.min) + step)));
+      control = (
+        <div className="bat-stepper" role="group" aria-labelledby={`${id}-label`}>
+          <button type="button" className="bat-step" aria-label={t.less} disabled={value !== null && value !== undefined && value <= question.min} onClick={() => change(value === null || value === undefined ? 0 : -1)}>−</button>
+          <input
+            className="bat-step-value"
+            type="number"
+            inputMode="numeric"
+            min={question.min}
+            max={question.max}
+            step="1"
+            placeholder={String(question.min)}
+            value={value ?? ''}
+            onChange={(event) => onChange(event.target.value === '' ? null : Math.min(question.max, Math.max(question.min, Math.round(Number(event.target.value)))))}
+            aria-labelledby={`${id}-label`}
+          />
+          <button type="button" className="bat-step" aria-label={t.more} disabled={value === question.max} onClick={() => change(1)}>+</button>
+        </div>
+      );
+    }
+  }
+  return (
+    <div className={`bat-q${missing ? ' is-invalid' : ''}`} id={id}>
+      <p className="bat-q-text" id={`${id}-label`}>{t.extra[question.key] || question.label}</p>
+      <div className="bat-extra-control">{control}</div>
+      {missing && <p className="bat-q-error"><Icon name="alert" size={14} /> {t.answerThis}</p>}
+    </div>
   );
 }
 
 function Survey() {
   const { banner, failure, clear } = useBanner();
   const [status, setStatus] = useState(null);
+  const [language, setLanguage] = useState(savedLanguage);
+  const t = TEXT[language];
   const [consent, setConsent] = useState(false);
-  const [answers, setAnswers] = useState(() => Array(QUESTIONS.length).fill(null));
+  const [answers, setAnswers] = useState(() => Array(TEXT.en.items.length).fill(null));
+  const [extraQuestions, setExtraQuestions] = useState([]);
+  const [extra, setExtra] = useState({});
   const [tried, setTried] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -58,7 +134,20 @@ function Survey() {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    getJson('/api/burnout/bat/questions/')
+      .then((data) => setExtraQuestions(data.questions))
+      .catch((error) => failure(error));
+  }, [failure]);
+
   const answered = useMemo(() => answers.filter((value) => value !== null).length, [answers]);
+  const total = t.items.length;
+
+  function pickLanguage(code) {
+    setLanguage(code);
+    try { window.localStorage.setItem(LANGUAGE_KEY, code); } catch { /* the choice is just not remembered */ }
+  }
+  const extraMissing = (key) => extra[key] === undefined || extra[key] === null;
 
   function choose(index, value) {
     setAnswers((current) => current.map((old, i) => (i === index ? value : old)));
@@ -70,19 +159,26 @@ function Survey() {
     clear();
     const firstMissing = answers.findIndex((value) => value === null);
     if (!consent) {
-      failure(new Error('Tick the box to confirm you agree before sending.'));
+      failure(new Error(t.errorConsent));
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
     if (firstMissing !== -1) {
-      failure(new Error(`Answer every statement. ${QUESTIONS.length - answered} left.`));
+      failure(new Error(t.errorStatements(total - answered)));
       const row = document.getElementById(`bat-q-${firstMissing}`);
+      if (row) row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      return;
+    }
+    const firstExtra = extraQuestions.find((question) => extraMissing(question.key));
+    if (extraQuestions.length === 0 || firstExtra) {
+      failure(new Error(t.errorSecondPart));
+      const row = firstExtra && document.getElementById(`extra-${firstExtra.key}`);
       if (row) row.scrollIntoView({ block: 'center', behavior: 'smooth' });
       return;
     }
     setSaving(true);
     try {
-      setStatus(await sendJson('/api/burnout/bat/', 'POST', { answers }));
+      setStatus(await sendJson('/api/burnout/bat/', 'POST', { answers, model_answers: extra }));
       window.scrollTo({ top: 0 });
     } catch (error) {
       failure(error);
@@ -96,46 +192,58 @@ function Survey() {
     return (
       <div className="bat-form">
         <Banner {...banner} onClose={clear} />
-        {!banner.message && <p className="bat-note">Loading…</p>}
+        {!banner.message && <p className="bat-note">{t.loading}</p>}
       </div>
     );
   }
 
-  if (status.status === 'submitted') return <div className="bat-form"><Submitted status={status} /></div>;
+  if (status.status === 'submitted') return <div className={`bat-form bat-${t.dir}`} dir={t.dir} lang={language}><Submitted status={status} t={t} /></div>;
 
   return (
-    <form className="bat-form" onSubmit={submit} noValidate>
+    <form className={`bat-form bat-${t.dir}`} dir={t.dir} lang={language} onSubmit={submit} noValidate>
       <Banner {...banner} onClose={clear} />
+
+      <div className="bat-lang" role="group" aria-label="Language / اللغة">
+        {LANGUAGES.map((item) => (
+          <button
+            type="button"
+            key={item.code}
+            className={`bat-lang-btn${language === item.code ? ' is-active' : ''}`}
+            aria-pressed={language === item.code}
+            lang={item.code}
+            onClick={() => pickLanguage(item.code)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
 
       <section className="ws-card bat-intro">
         <div className="ws-card-head">
-          <h3>How do you feel at work?</h3>
-          <p>
-            The following statements are related to your work situation and how you experience it.
-            Say how often each statement applies to you. It takes about 5 minutes.
-          </p>
+          <h3>{t.introTitle}</h3>
+          <p>{t.intro}</p>
         </div>
         <label className={`bat-consent${tried && !consent ? ' is-invalid' : ''}`}>
           <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
-          <span>{CONSENT_TEXT}</span>
+          <span>{t.consent}</span>
         </label>
       </section>
 
       <section className="ws-card bat-questions">
         <div className="bat-progress" aria-live="polite">
-          <span>{answered} of {QUESTIONS.length} answered</span>
-          <span className="bat-bar"><span style={{ width: `${(answered / QUESTIONS.length) * 100}%` }} /></span>
+          <span>{t.answered(answered, total)}</span>
+          <span className="bat-bar"><span style={{ width: `${(answered / total) * 100}%` }} /></span>
         </div>
 
-        {QUESTIONS.map((text, index) => {
+        {t.items.map((text, index) => {
           const missing = tried && answers[index] === null;
           return (
-            <div className={`bat-q${missing ? ' is-invalid' : ''}`} key={text} id={`bat-q-${index}`}>
+            <div className={`bat-q${missing ? ' is-invalid' : ''}`} key={index} id={`bat-q-${index}`}>
               <p className="bat-q-text" id={`bat-q-label-${index}`}>
                 <span className="bat-q-n">{index + 1}</span>{text}
               </p>
               <div className="bat-scale" role="radiogroup" aria-labelledby={`bat-q-label-${index}`}>
-                {CHOICES.map((label, choice) => (
+                {t.choices.map((label, choice) => (
                   <label className="bat-opt" key={label}>
                     <input
                       type="radio"
@@ -148,25 +256,42 @@ function Survey() {
                   </label>
                 ))}
               </div>
-              {missing && <p className="bat-q-error"><Icon name="alert" size={14} /> Choose one answer.</p>}
+              {missing && <p className="bat-q-error"><Icon name="alert" size={14} /> {t.chooseOne}</p>}
             </div>
           );
         })}
       </section>
 
+      <section className="ws-card bat-questions">
+        <div className="ws-card-head">
+          <h3>{t.secondTitle}</h3>
+          <p>{t.secondIntro}</p>
+        </div>
+        {extraQuestions.map((question) => (
+          <ExtraQuestion
+            key={question.key}
+            question={question}
+            value={extra[question.key]}
+            missing={tried && extraMissing(question.key)}
+            onChange={(value) => setExtra((current) => ({ ...current, [question.key]: value }))}
+            t={t}
+          />
+        ))}
+      </section>
+
       <div className="bat-actions">
         <button className="ws-btn ws-btn-primary" type="submit" disabled={saving}>
-          <Icon name="send" size={15} />{saving ? 'Sending…' : 'Submit survey'}
+          <Icon name="send" size={15} />{saving ? t.sending : t.submit}
         </button>
       </div>
-      <p className="bat-note">BAT-12 © Schaufeli, De Witte &amp; Desart (2019). Not a diagnosis.</p>
+      <p className="bat-note">{t.note}</p>
     </form>
   );
 }
 
 export function EmployeeWellbeing() {
   return (
-    <Shell role="Employee" title="Well-being survey" subtitle="Twelve short statements about how you experience your work">
+    <Shell role="Employee" title="Well-being survey" subtitle="Twelve short statements and ten questions about how you experience your work">
       <Survey />
     </Shell>
   );
@@ -177,12 +302,62 @@ export function EmployeeWellbeing() {
 
 const LEVELS = ['Low', 'Moderate', 'High', 'Severe'];
 
+// The BAT result is a colour zone in the backend; the manager sees the level in words.
+const BAT_LEVEL = { green: 'Low', orange: 'Moderate', red: 'High' };
+
+// Explains the words and colours of the list. Closed until the manager opens it.
+function ReadingGuide() {
+  return (
+    <details className="bt-guide">
+      <summary>How to read this</summary>
+      <div className="bt-guide-body">
+        <div>
+          <h4>Burnout status</h4>
+          <p>Puts the two results below together, so you see one answer per person.</p>
+          <ul>
+            <li><span className="bt-overall-chip bt-overall-strong_signal">Strong signal</span> The survey and the model both show a high risk. Follow up soon.</li>
+            <li><span className="bt-overall-chip bt-overall-check_in">Check in</span> The employee says they feel burned out, but the model does not. Trust their answers and talk to them.</li>
+            <li><span className="bt-overall-chip bt-overall-monitor">Monitor</span> A middle result, or the two results differ. Look again next month.</li>
+            <li><span className="bt-overall-chip bt-overall-no_concern">No concern</span> Both results are low.</li>
+          </ul>
+        </div>
+        <div>
+          <h4>Model</h4>
+          <p>The predicted burnout risk, from 0 to 10, based on work data and the monthly survey.</p>
+          <ul>
+            <li><span className="bt-level bt-level-Low">Low</span> below 3.5</li>
+            <li><span className="bt-level bt-level-Moderate">Moderate</span> 3.5 to 5.4</li>
+            <li><span className="bt-level bt-level-High">High</span> 5.5 to 6.9</li>
+            <li><span className="bt-level bt-level-Severe">Severe</span> 7 and above</li>
+          </ul>
+        </div>
+        <div>
+          <h4>BAT</h4>
+          <p>The employee&rsquo;s own answers to the burnout questionnaire (BAT-12).</p>
+          <ul>
+            <li><span className="bt-bat bt-bat-green">Low</span> a normal level</li>
+            <li><span className="bt-bat bt-bat-orange">Moderate</span> a possible risk</li>
+            <li><span className="bt-bat bt-bat-red">High</span> a high risk</li>
+          </ul>
+        </div>
+        <p className="bt-guide-note">These are estimates to help you notice who may need support. They are not a medical diagnosis.</p>
+      </div>
+    </details>
+  );
+}
+
 // A short suggestion shown under a factor that raises the risk.
 // It is matched by words in the factor name (the first match wins, so the more
 // specific rules come first), so it keeps working when the model's feature
 // names change. Edit the wording here.
 const SUGGESTIONS = [
   [['overdue', 'late', 'deadline'], 'Consider extending deadlines or reassigning overdue tasks.'],
+  [['sleep'], 'Encourage them to get enough rest and keep regular sleep hours.'],
+  [['stress'], 'Check in with them about what is causing the stress.'],
+  [['personal life'], 'Talk with them about how work affects their personal life.'],
+  [['support'], 'Check in on the support they get from colleagues and from you.'],
+  [['control'], 'Consider giving them more say in how and when they work.'],
+  [['exercise'], 'Encourage regular breaks and some physical activity.'],
   [['task', 'workload'], 'Consider balancing their workload across the team.'],
   [['hour'], 'Consider lowering their weekly hours or moving some tasks to others.'],
   [['meeting'], 'Consider cutting or shortening recurring meetings.'],
@@ -213,9 +388,58 @@ function Factor({ factor }) {
   );
 }
 
+// The saved predictions of one employee (newest first) and the BAT result of the
+// same surveys. Loaded when the manager opens it.
+function History({ employeeId }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    getJson(`/api/burnout/history/${employeeId}/`)
+      .then((result) => { if (active) setData(result); })
+      .catch((problem) => { if (active) setError(problem.message || 'Could not load the history.'); });
+    return () => { active = false; };
+  }, [employeeId]);
+
+  if (error) return <p className="bt-muted bt-history-note">{error}</p>;
+  if (!data) return <p className="bt-muted bt-history-note">Loading…</p>;
+  if (data.predictions.length === 0) return <p className="bt-muted bt-history-note">No saved predictions yet. One is saved each time the employee sends the monthly survey.</p>;
+
+  const batByDate = Object.fromEntries(data.bat.map((row) => [row.date, row]));
+  return (
+    <table className="bt-history-table">
+      <thead>
+        <tr><th>Date</th><th>Risk</th><th>Score</th><th>Main factors</th><th>BAT survey</th></tr>
+      </thead>
+      <tbody>
+        {data.predictions.map((row) => {
+          const bat = batByDate[row.predicted_at];
+          return (
+            <tr key={row.id}>
+              <td>{formatDate(row.predicted_at)}</td>
+              <td><span className={`bt-level bt-level-${row.level}`}>{row.level}</span></td>
+              <td>{Number(row.score).toFixed(1)} / 10</td>
+              <td>
+                {row.top_factors.map((factor) => (
+                  <span className={`bt-factor ${factor.direction === 'increases' ? 'bt-up' : 'bt-down'}`} key={factor.name}>
+                    <span aria-hidden="true">{factor.direction === 'increases' ? '↑' : '↓'}</span>{factor.name}
+                  </span>
+                ))}
+              </td>
+              <td>{bat ? <span className={`bt-bat bt-bat-${bat.zone}`}>{BAT_LEVEL[bat.zone] || bat.zone}</span> : <span className="bt-muted">-</span>}</td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
 function MemberRow({ member }) {
   const name = displayName(member);
   const ok = member.status === 'ok';
+  const [open, setOpen] = useState(false);
   return (
     <li className="bt-row">
       <div className="bt-person">
@@ -225,14 +449,22 @@ function MemberRow({ member }) {
           {member.job_title && <span>{member.job_title}</span>}
         </div>
       </div>
-      <div className="bt-risk">
-        {ok ? (
+      <div className="bt-status">
+        {member.combined ? (
           <>
-            <span className={`bt-level bt-level-${member.level}`}>{member.level}</span>
-            <span className="bt-score">{Number(member.score).toFixed(1)}<small> / 10</small></span>
+            <span className={`bt-overall-chip bt-overall-${member.combined.key}`}>{member.combined.label}</span>
+            <p className="bt-overall-msg">{member.combined.message}</p>
           </>
+        ) : ok ? (
+          <span className={`bt-level bt-level-${member.level}`}>{member.level}</span>
         ) : (
           <span className="bt-level bt-level-none">Insufficient data</span>
+        )}
+        {ok && (
+          <span className="bt-overall-bat">
+            Model <strong>{member.level} {Number(member.score).toFixed(1)}</strong>
+            {member.bat && <> · BAT <span className={`bt-bat bt-bat-${member.bat.zone}`}>{BAT_LEVEL[member.bat.zone] || member.bat.zone}</span></>}
+          </span>
         )}
       </div>
       <div className="bt-factors">
@@ -246,6 +478,14 @@ function MemberRow({ member }) {
           </span>
         )}
       </div>
+      {ok && (
+        <div className="bt-history">
+          <button type="button" className="ws-btn ws-btn-outline ws-btn-sm bt-history-toggle" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+            {open ? 'Hide history' : 'Show history'}
+          </button>
+          {open && <History employeeId={member.id} />}
+        </div>
+      )}
     </li>
   );
 }
@@ -253,6 +493,7 @@ function MemberRow({ member }) {
 function TeamBurnout() {
   const { banner, failure, clear } = useBanner();
   const [members, setMembers] = useState(null);
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
     getJson('/api/burnout/team/')
@@ -266,8 +507,13 @@ function TeamBurnout() {
   const sorted = useMemo(() => {
     if (!members) return [];
     const rank = (member) => (member.status === 'ok' ? -member.score : 1);
-    return [...members].sort((a, b) => rank(a) - rank(b));
-  }, [members]);
+    const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const found = members.filter((member) => {
+      const text = `${member.first_name} ${member.last_name} ${member.job_title}`.toLowerCase();
+      return words.every((word) => text.includes(word));
+    });
+    return found.sort((a, b) => rank(a) - rank(b));
+  }, [members, query]);
 
   const counts = useMemo(() => {
     const list = members || [];
@@ -297,14 +543,30 @@ function TeamBurnout() {
           <section className="ws-card bt-card">
             <div className="ws-card-head">
               <h3>Your team</h3>
-              <p>Highest risk first. Based on work data such as hours, meetings, leave and tasks.</p>
+              <p>Highest predicted risk first. The status compares the model prediction with the employee's own BAT survey answers.</p>
+            </div>
+            <ReadingGuide />
+            <div className="bt-search-row">
+              <input
+                className="bt-search"
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search by employee name"
+                aria-label="Search your team by employee name"
+              />
+              <span className="bt-search-count" aria-live="polite">{sorted.length} of {members.length}</span>
             </div>
             <div className="bt-head" aria-hidden="true">
-              <span>Employee</span><span>Risk</span><span>What drives it</span>
+              <span>Employee</span><span>Burnout status</span><span>What drives it</span>
             </div>
-            <ul className="bt-list">
-              {sorted.map((member) => <MemberRow member={member} key={member.id} />)}
-            </ul>
+            {sorted.length === 0 ? (
+              <p className="bt-muted bt-no-match">No employee matches &ldquo;{query.trim()}&rdquo;.</p>
+            ) : (
+              <ul className="bt-list">
+                {sorted.map((member) => <MemberRow member={member} key={member.id} />)}
+              </ul>
+            )}
           </section>
           <p className="bat-note">These are estimates to help you notice who may need support. They are not a diagnosis.</p>
         </>

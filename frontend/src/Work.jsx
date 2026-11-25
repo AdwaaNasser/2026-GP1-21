@@ -254,6 +254,8 @@ function DetailsContent({ role }) {
   // so this is the number of tasks the DELETE will remove.
   const taskCount = project.progress?.total_tasks ?? tasks.length;
   const linkedTaskCount = tasks.filter((task) => (task.linked_goals || []).length > 0).length;
+  // Finished work stays: the server refuses to delete a project with completed tasks.
+  const completedTaskCount = tasks.filter((task) => task.status === 'completed').length;
 
   const taskStats = [
     { label: 'Tasks', value: tasks.length },
@@ -292,7 +294,8 @@ function DetailsContent({ role }) {
 <button
   className="ws-btn ws-btn-outline-danger"
   type="button"
-  disabled={deleting}
+  disabled={deleting || completedTaskCount > 0}
+  title={completedTaskCount > 0 ? 'A project with completed tasks cannot be deleted' : undefined}
   onClick={() => setConfirmingDelete(true)}
 >
   <Icon name="x" size={15} />

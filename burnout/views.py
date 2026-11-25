@@ -7,7 +7,7 @@ from accounts.models import Employee
 from goals.permissions import IsHR, IsManager
 from workspace.permissions import is_employee, is_manager
 
-from . import bat, services, surveys
+from . import bat, model_inputs, services, surveys
 
 
 class IsManagerOnly(IsAuthenticated):
@@ -37,13 +37,42 @@ class BurnoutPredictionView(APIView):
                 {'detail': 'This employee is not in your team.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
+        prediction = services.predict(employee)
         return Response({
             'employee': {
                 'id': employee.pk,
                 'first_name': employee.user.first_name or '',
                 'last_name': employee.user.last_name or '',
             },
-            **services.predict(employee),
+            **prediction,
+            **services.assessment(employee, prediction),
+        })
+
+
+class BurnoutHistoryView(APIView):
+    """GET /api/burnout/history/<employee_id>/
+
+    The saved predictions of one employee (newest first, with their main
+    factors) and the BAT results of the same surveys. Manager: only employees
+    of their own team. HR gets 403. Reads only."""
+
+    permission_classes = [IsManagerOnly]
+
+    def get(self, request, employee_id):
+        employee = services.can_view(request.user, employee_id)
+        if employee is None:
+            return Response(
+                {'detail': 'This employee is not in your team.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response({
+            'employee': {
+                'id': employee.pk,
+                'first_name': employee.user.first_name or '',
+                'last_name': employee.user.last_name or '',
+            },
+            'predictions': services.history(employee),
+            'bat': surveys.bat_history(employee),
         })
 
 
@@ -58,9 +87,12 @@ class BatSurveyView(APIView):
     """The monthly BAT survey of the signed-in employee.
 
     GET  -> {"status": "available" | "submitted", "submitted_on", "next_available"}
-    POST -> body {"answers": [12 numbers from 1 to 5]}; saves one row in
-            burnoutsurvey and answers with the same status. The employee never
-            receives the score. A second survey in the same period is refused (409)."""
+    POST -> body {"answers": [12 numbers from 1 to 5],
+                  "model_answers": {the 10 questions of model_inputs.QUESTIONS}};
+            all are required. Saves one row in burnoutsurvey and answers with the
+            same status. The employee never receives the score. A second survey
+            in the same period is refused (409).
+    GET  /api/burnout/bat/questions/ -> the 10 model questions (key, label, kind, min, max)."""
 
     permission_classes = [IsAuthenticated]
 
@@ -78,21 +110,40 @@ class BatSurveyView(APIView):
         problems = bat.validate_answers(answers)
         if problems:
             return Response({'answers': problems}, status=status.HTTP_400_BAD_REQUEST)
+        model_answers, model_problems = model_inputs.validate(
+            request.data.get('model_answers') if hasattr(request.data, 'get') else None
+        )
+        if model_problems:
+            return Response({'model_answers': model_problems}, status=status.HTTP_400_BAD_REQUEST)
         try:
-            result = surveys.submit(employee, answers)
+            result = surveys.submit(employee, answers, model_answers)
         except surveys.AlreadySubmitted:
             return Response(
                 {'detail': 'You already submitted the survey for this period.'},
                 status=status.HTTP_409_CONFLICT,
             )
+        services.run_prediction_safely(employee)    # the survey is already saved
         return Response(result, status=status.HTTP_201_CREATED)
+
+
+class SurveyQuestionsView(APIView):
+    """GET /api/burnout/bat/questions/
+
+    The questions of the survey that are used by the burnout prediction model
+    (the 12 BAT items are shown by the frontend as before)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response({'questions': model_inputs.QUESTIONS})
 
 
 class TeamBurnoutView(APIView):
     """GET /api/burnout/team/
 
-    The predicted burnout risk of every employee in the signed-in manager's own
-    team (and nobody else). Reads only, writes nothing."""
+    The predicted burnout risk, the latest BAT result and the overall reading of
+    every employee in the signed-in manager's own team (and nobody else). Reads
+    only, writes nothing."""
 
     permission_classes = [IsManager]
 
@@ -100,12 +151,14 @@ class TeamBurnoutView(APIView):
         members = []
         for employee in services.team_of(request.user):
             user = employee.user
+            prediction = services.predict(employee)
             members.append({
                 'id': employee.pk,
                 'first_name': user.first_name or '',
                 'last_name': user.last_name or '',
                 'job_title': user.job_title or '',
-                **services.predict(employee),
+                **prediction,
+                **services.assessment(employee, prediction),
             })
         return Response({'members': members})
 

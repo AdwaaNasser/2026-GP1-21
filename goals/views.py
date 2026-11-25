@@ -251,7 +251,7 @@ class MyPerformanceView(APIView):
         employee, error = resolve_employee(request)
         if error:
             return error
-        return Response(services.performance(employee, year))
+        return Response(services.performance(employee, year, for_employee=not is_manager(request.user)))
 
 
 class PerformanceCompareView(APIView):
@@ -266,13 +266,18 @@ class PerformanceCompareView(APIView):
         employee, error = resolve_employee(request)
         if error:
             return error
-        by_year = {y: services.performance(employee, y) for y in range(year - 3, year + 1)}
+        for_employee = not is_manager(request.user)
+        by_year = {
+            y: services.performance(employee, y, for_employee=for_employee)
+            for y in range(year - 3, year + 1)
+        }
         current, previous = by_year[year], by_year[year - 1]
 
         def quarters(data):
             grouped = {}
             for goal in data['goals']:
-                grouped.setdefault(goal['period'], []).append(goal['rating'])
+                if goal['rating'] is not None:
+                    grouped.setdefault(goal['period'], []).append(goal['rating'])
             return rules.bucket_averages(grouped)
 
         return Response({
@@ -308,8 +313,31 @@ class TeamPerformanceView(APIView):
                 'goal_count': len(data['goals']),
                 'overall_score': data['overall_score'],
                 'is_final': data['is_final'],
+                'status': data['status'],
             })
         return Response(rows)
+
+
+class ApproveEvaluationView(APIView):
+    """POST {year}: the manager approves the evaluation of someone in their
+    team for a year that has ended. The employee then sees the ratings."""
+
+    permission_classes = [IsManager]
+
+    def post(self, request, employee_id):
+        employee = services.team_of(request.user).filter(pk=employee_id).first()
+        if employee is None:
+            return not_found('This employee is not in your team.')
+        raw = request.data.get('year')
+        try:
+            year = int(raw)
+        except (TypeError, ValueError):
+            return bad_request({'year': 'Enter a valid year.'})
+        try:
+            services.approve(employee, year, request.user)
+        except services.ApprovalError as error:
+            return bad_request({'detail': str(error)})
+        return Response(services.performance(employee, year))
 
 
 class TeamMemberOverviewView(APIView):

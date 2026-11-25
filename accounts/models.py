@@ -394,6 +394,18 @@ class Goal(models.Model):
     actual_value = models.DecimalField(
         max_digits=10, decimal_places=2, blank=True, null=True,
     )
+    # Manager approval of the employee's evaluation for a finished year. It is set
+    # on every goal of that employee and year at once; until then the year is
+    # "pending approval" and the employee does not see the ratings.
+    approved_at = models.DateTimeField(blank=True, null=True)
+    approved_by = models.ForeignKey(
+        Manager,
+        on_delete=models.SET_NULL,
+        db_column='approved_by_id',
+        related_name='approved_goals',
+        blank=True,
+        null=True,
+    )
 
     class Meta:
         db_table = 'goal'
@@ -435,12 +447,6 @@ class TaskGoal(models.Model):
         db_table = 'task_goal'
 
 
-class PredictionFactor(models.Model):
-    factor_name = models.CharField(max_length=255, primary_key=True)
-    contribution = models.DecimalField(max_digits=5, decimal_places=2)
-
-    class Meta:
-        db_table = 'predictionfactor'
 
 
 class BurnoutSurvey(models.Model):
@@ -476,6 +482,19 @@ class BurnoutSurvey(models.Model):
         blank=True,
         null=True,
     )
+    # Answers to the questions used by the burnout prediction model. They are
+    # asked in the same monthly survey as the BAT-12; all are required in the
+    # form, the columns are nullable so a row can exist without them.
+    stress_score = models.PositiveSmallIntegerField(blank=True, null=True)
+    work_life_balance_score = models.PositiveSmallIntegerField(blank=True, null=True)
+    meetings_per_day = models.PositiveSmallIntegerField(blank=True, null=True)
+    sleep_hours_per_night = models.DecimalField(max_digits=3, decimal_places=1, blank=True, null=True)
+    vacation_days_taken = models.PositiveSmallIntegerField(blank=True, null=True)
+    social_support_score = models.PositiveSmallIntegerField(blank=True, null=True)
+    manager_support_score = models.PositiveSmallIntegerField(blank=True, null=True)
+    exercise_days_per_week = models.PositiveSmallIntegerField(blank=True, null=True)
+    autonomy_score = models.PositiveSmallIntegerField(blank=True, null=True)
+    ai_tools_daily = models.BooleanField(blank=True, null=True)
     employee = models.ForeignKey(
         Employee,
         on_delete=models.PROTECT,
@@ -505,3 +524,23 @@ class BurnoutPrediction(models.Model):
 
     class Meta:
         db_table = 'burnoutprediction'
+
+
+class PredictionFactor(models.Model):
+    """One of the main factors behind one burnout prediction.
+
+    Weak entity: it is identified by the prediction it explains together with
+    its own factor name (primary key: predictionID + factorName)."""
+
+    pk = models.CompositePrimaryKey('prediction', 'factor_name')
+    prediction = models.ForeignKey(
+        BurnoutPrediction,
+        on_delete=models.CASCADE,
+        db_column='predictionID',
+        related_name='factors',
+    )
+    factor_name = models.CharField(max_length=255)
+    contribution = models.DecimalField(max_digits=5, decimal_places=2)
+
+    class Meta:
+        db_table = 'predictionfactor'

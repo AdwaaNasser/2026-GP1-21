@@ -1,0 +1,139 @@
+{
+  "features": [
+    "age",
+    "gender",
+    "country",
+    "job_role",
+    "seniority_level",
+    "years_experience",
+    "years_at_company",
+    "company_size",
+    "industry",
+    "work_mode",
+    "salary_usd",
+    "work_hours_per_week",
+    "meetings_per_day",
+    "team_size",
+    "sleep_hours_per_night",
+    "exercise_days_per_week",
+    "vacation_days_taken",
+    "therapy_access",
+    "uses_therapy",
+    "ai_tools_daily",
+    "manager_support_score",
+    "work_life_balance_score",
+    "job_satisfaction_score",
+    "social_support_score",
+    "deadline_pressure_score",
+    "autonomy_score",
+    "stress_score"
+  ],
+  "numeric_features": [
+    "age",
+    "years_experience",
+    "years_at_company",
+    "salary_usd",
+    "work_hours_per_week",
+    "meetings_per_day",
+    "team_size",
+    "sleep_hours_per_night",
+    "exercise_days_per_week",
+    "vacation_days_taken",
+    "therapy_access",
+    "uses_therapy",
+    "ai_tools_daily",
+    "manager_support_score",
+    "work_life_balance_score",
+    "job_satisfaction_score",
+    "social_support_score",
+    "deadline_pressure_score",
+    "autonomy_score",
+    "stress_score"
+  ],
+  "categorical_options": {
+    "gender": [
+      "Female",
+      "Male",
+      "Prefer not to say"
+    ],
+    "country": [
+      "Australia",
+      "Brazil",
+      "Canada",
+      "France",
+      "Germany",
+      "India",
+      "Netherlands",
+      "Singapore",
+      "UK",
+      "USA"
+    ],
+    "job_role": [
+      "Backend Developer",
+      "Cloud Engineer",
+      "Cybersecurity Engineer",
+      "Data Analyst",
+      "Data Scientist",
+      "DevOps Engineer",
+      "Frontend Developer",
+      "Full Stack Developer",
+      "ML Engineer",
+      "Product Manager",
+      "QA Engineer",
+      "Software Engineer"
+    ],
+    "seniority_level": [
+      "Junior",
+      "Lead",
+      "Manager",
+      "Mid",
+      "Principal",
+      "Senior"
+    ],
+    "company_size": [
+      "Enterprise (5000+)",
+      "Large (1001-5000)",
+      "Mid (201-1000)",
+      "Small (51-200)",
+      "Startup (1-50)"
+    ],
+    "industry": [
+      "AI / ML Startup",
+      "Consulting",
+      "Cybersecurity",
+      "E-commerce",
+      "Enterprise Software",
+      "Fintech",
+      "Gaming",
+      "Healthcare Tech",
+      "SaaS / Cloud",
+      "Social Media / AdTech"
+    ],
+    "work_mode": [
+      "Hybrid",
+      "On-site",
+      "Remote"
+    ]
+  },
+  "level_cutoffs": {
+    "Low": "<= 3.5",
+    "Moderate": "<= 5.5",
+    "High": "<= 7.0",
+    "Severe": "> 7.0"
+  },
+  "best_params": {
+    "l2_regularization": 1.6313946190943742,
+    "learning_rate": 0.0714737322617201,
+    "max_depth": 3,
+    "max_features": 0.8167648553804474,
+    "max_iter": 951,
+    "max_leaf_nodes": 23,
+    "min_samples_leaf": 116
+  },
+  "test_metrics": {
+    "MAE": 0.7645,
+    "RMSE": 0.965,
+    "R2": 0.8692
+  },
+  "sklearn_version": "1.9.1"
+}

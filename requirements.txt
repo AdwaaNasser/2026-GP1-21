@@ -4,3 +4,8 @@ djangorestframework-simplejwt==5.5.1
 django-cors-headers==4.9.0
 psycopg[binary]>=3.2,<4
 sentence-transformers==6.2.0
+scikit-learn==1.9.1  # exactly this version: the saved model was trained with it
+shap
+pandas
+numpy
+joblib

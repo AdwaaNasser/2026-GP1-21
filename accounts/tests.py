@@ -183,6 +183,24 @@ class SchemaTests(SimpleTestCase):
         self.assertNotIn('factor_name', field_names)
         self.assertIn('contribution', {field.name for field in PredictionFactor._meta.fields})
 
+    def test_prediction_factor_is_a_weak_entity_of_the_prediction(self):
+        # primary key = predictionID + factorName, and a foreign key to the prediction
+        self.assertEqual(
+            [field.name for field in PredictionFactor._meta.pk.fields],
+            ['prediction', 'factor_name'],
+        )
+        self.assertEqual(PredictionFactor._meta.get_field('prediction').related_model, BurnoutPrediction)
+
+    def test_burnout_survey_stores_the_answers_used_by_the_model(self):
+        names = {field.name for field in BurnoutSurvey._meta.fields}
+        self.assertTrue({
+            'stress_score', 'work_life_balance_score', 'meetings_per_day', 'sleep_hours_per_night',
+            'vacation_days_taken', 'social_support_score', 'manager_support_score',
+            'exercise_days_per_week', 'autonomy_score', 'ai_tools_daily',
+        } <= names)
+        for name in ('stress_score', 'ai_tools_daily'):
+            self.assertTrue(BurnoutSurvey._meta.get_field(name).null)
+
 
 class AccountApiTests(SimpleTestCase):
     def setUp(self):

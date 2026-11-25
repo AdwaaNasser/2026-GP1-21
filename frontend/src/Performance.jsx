@@ -292,13 +292,13 @@ function ScoreRing({ score }) {
   );
 }
 
-function Hero({ title, score, final, summary, delta, history, subject, chart, compact = false }) {
+function Hero({ title, score, final, pending = false, approved = false, summary, delta, history, subject, chart, compact = false }) {
   return (
     <section className={`gl-hero${compact ? ' gl-hero-compact' : ''}${!chart && !history ? ' gl-hero-solo' : ''}`}>
       <div className="gl-hero-main">
-        <p className="gl-hero-kicker">{title}{final && <span className="gl-final">Final</span>}</p>
+        <p className="gl-hero-kicker">{title}{approved ? <span className="gl-final">Approved</span> : pending ? <span className="gl-final">Pending approval</span> : final && <span className="gl-final">Final</span>}</p>
         {score === null || score === undefined ? (
-          <div className="gl-hero-score gl-hero-score-empty"><strong>No score yet</strong></div>
+          <div className="gl-hero-score gl-hero-score-empty"><strong>{pending ? 'Waiting for your manager' : 'No score yet'}</strong></div>
         ) : (
           <ScoreRing score={score} />
         )}
@@ -359,7 +359,7 @@ function GoalCards({ goals, renderExtra }) {
       {goals.map((goal, index) => (
         <article className="gl-goal-card" key={goal.id} style={{ '--i': index }}>
           <div className={`gl-rate ${ratingClass(goal.rating)}`} title="Rating out of 5">
-            <strong>{goal.rating}</strong>
+            <strong>{goal.rating ?? '–'}</strong>
             <span>of 5</span>
           </div>
           <div className="gl-goal-body">
@@ -429,7 +429,9 @@ function PerformanceContent() {
             title={`Your KPI score in ${year}`}
             score={data.overall_score}
             final={data.is_final}
-            summary={goalSummary(data)}
+            pending={data.status === 'pending'}
+            approved={data.status === 'approved'}
+            summary={data.status === 'pending' ? `${year} has ended. Your ratings will show here once your manager approves the evaluation.` : goalSummary(data)}
             delta={compare && <Delta current={data.overall_score} previous={compare.previous_score} previousYear={compare.previous_year} />}
             history={compare ? compare.history : undefined}
             subject="Your score by year"
@@ -888,6 +890,7 @@ function TeamHero({ team, year }) {
 
 function PersonProgress({ person, year, onManage, failure }) {
   const [data, setData] = useState(null);
+  const [approving, setApproving] = useState(false);
   useEffect(() => {
     getJson(`/api/goals/employees/${person.id}/goals/?year=${year}`)
       .then(setData)
@@ -897,6 +900,18 @@ function PersonProgress({ person, year, onManage, failure }) {
       });
   }, [person.id, year, failure]);
 
+  async function approve() {
+    setApproving(true);
+    try {
+      const result = await sendJson(`/api/goals/team/${person.id}/approve/`, 'POST', { year });
+      setData((current) => ({ ...current, ...result }));
+    } catch (error) {
+      failure(error);
+    } finally {
+      setApproving(false);
+    }
+  }
+
   if (data === null) return <TableSkeleton rows={3} />;
   return (
     <div className="gl-view">
@@ -905,8 +920,20 @@ function PersonProgress({ person, year, onManage, failure }) {
         title={`${displayName(person)} in ${year}`}
         score={data.overall_score}
         final={data.is_final}
+        pending={data.status === 'pending'}
+        approved={data.status === 'approved'}
         summary={goalSummary(data)}
       />
+      {data.status === 'pending' && (
+        <div className="ws-form-actions">
+          <p className="ws-hint" style={{ margin: 0 }}>
+            {year} has ended. {displayName(person)} cannot see these ratings until you approve the evaluation.
+          </p>
+          <button type="button" className="ws-btn ws-btn-primary" disabled={approving} onClick={approve}>
+            {approving ? 'Approving…' : 'Approve evaluation'}
+          </button>
+        </div>
+      )}
       {data.goals.length === 0 ? (
         <EmptyState icon="flag" title="No goals yet">
           {year === CURRENT_YEAR

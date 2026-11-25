@@ -236,7 +236,15 @@ class ProjectDetailView(APIView):
         project = self.get_project(request, project_id) 
         if project is None:
             return not_found('Project not found.')
-        # Task.project is PROTECT, so the tasks are deleted first, in the same
+        # Finished work stays: deleting the project would delete its completed
+        # tasks and change the KPI progress and the experience history that
+        # the recommendations use.
+        if Task.objects.filter(project=project, status=COMPLETED).exists():
+            return Response(
+                {'detail': 'This project has completed tasks, so it cannot be deleted.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        # Task.project is PROTECT, so the other tasks are deleted first, in the same
         # transaction. Their task_goal and task_skills rows go with them (CASCADE).
         with transaction.atomic():
             owners = goal_owners(TaskGoal.objects.filter(task__project=project))

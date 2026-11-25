@@ -86,13 +86,24 @@ def goal_data(goal, today):
     }
 
 
-def performance(employee, year, today=None):
+def approval_status(goals, ended):
+    """open (year not over or no goals), pending (over, not approved) or approved."""
+    if not goals or not ended:
+        return 'open'
+    return 'approved' if all(g.approved_at is not None for g in goals) else 'pending'
+
+
+def performance(employee, year, today=None, for_employee=False):
     """Everything the employee view needs for one evaluation year.
 
     The overall score is never stored: it is always calculated from the
     goal ratings. Once the year has ended the first view saves each goal's
     rating (and the task count of Task-based goals), so later task changes
     cannot alter the result.
+
+    When the year has ended the manager still has to approve the evaluation.
+    Until then (status "pending") the employee does not see the ratings or the
+    score (for_employee=True); the manager always sees them.
     """
     today = today or timezone.localdate()
     goals = list(goals_of(employee, year))
@@ -103,12 +114,43 @@ def performance(employee, year, today=None):
     rows = [goal_data(g, today) for g in goals]
     score = rules.overall_score([(r['rating'], r['weight']) for r in rows])
     _store_overall_score(goals, score)
-    return {
+    status = approval_status(goals, ended)
+    approved = [g.approved_at for g in goals if g.approved_at is not None]
+    data = {
         'year': year,
         'goals': rows,
         'overall_score': None if score is None else float(score),
         'is_final': bool(goals) and all(is_frozen_goal(g, today) for g in goals),
+        'status': status,
+        'approved_at': max(approved) if status == 'approved' else None,
     }
+    if for_employee and status == 'pending':
+        data['overall_score'] = None
+        for row in rows:
+            row['rating'] = None
+    return data
+
+
+class ApprovalError(Exception):
+    """The evaluation cannot be approved (the message says why)."""
+
+
+@transaction.atomic
+def approve(employee, year, manager_user, today=None):
+    """The manager approves the evaluation of one employee for a finished year."""
+    today = today or timezone.localdate()
+    if not rules.year_ended(year, today):
+        raise ApprovalError('The evaluation year has not ended yet.')
+    goals = list(goals_of(employee, year))
+    if not goals:
+        raise ApprovalError('This employee had no goals in that year.')
+    if approval_status(goals, True) == 'approved':
+        raise ApprovalError('This evaluation is already approved.')
+    if any(goal.rating is None for goal in goals):
+        _freeze(goals, today)
+    Goal.objects.filter(pk__in=[g.pk for g in goals]).update(
+        approved_at=timezone.now(), approved_by_id=manager_user.pk,
+    )
 
 
 def _store_overall_score(goals, score):

@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.test import SimpleTestCase, override_settings
+from django.utils import timezone
 from rest_framework.test import APIRequestFactory, APITestCase, force_authenticate
 
 from accounts.models import (
@@ -80,6 +81,7 @@ class TeamPerformanceViewTests(SimpleTestCase):
                     'goals': [],
                     'overall_score': None,
                     'is_final': False,
+                    'status': 'open',
                 },
             ),
         ):
@@ -345,16 +347,16 @@ class GoalsApiTests(APITestCase):
         goal = Goal.objects.get(name='A')
         goal.actual_value = Decimal('4')
         goal.save()
-        self.client.force_authenticate(self.sara)
+        self.client.force_authenticate(self.boss)
         with patch('django.utils.timezone.localdate', return_value=date(2027, 1, 5)):
-            data = self.client.get('/performance/?year=2026').data
+            data = self.client.get(f'/performance/?year=2026&employee={self.sara.pk}').data
         self.assertTrue(data['is_final'])
         self.assertEqual(data['overall_score'], 4.0)
         goal.refresh_from_db()
         goal.actual_value = Decimal('0')   # a late change must not alter the final score
         goal.save()
         with patch('django.utils.timezone.localdate', return_value=date(2027, 1, 6)):
-            data = self.client.get('/performance/?year=2026').data
+            data = self.client.get(f'/performance/?year=2026&employee={self.sara.pk}').data
         self.assertEqual(data['overall_score'], 4.0)
         goal.refresh_from_db()
         self.assertEqual(goal.rating, 4)   # the result is kept on the goal itself
@@ -445,6 +447,7 @@ class GoalsApiTests(APITestCase):
             target_value=Decimal('10'), actual_value=Decimal(actual),
             evaluation_year=2025, manager_id=self.boss.pk,
             employee=Employee.objects.get(pk=self.sara.pk),
+            approved_at=timezone.now(), approved_by_id=self.boss.pk,
         )
 
     def test_compare_shows_this_year_and_last_year(self):
@@ -484,3 +487,76 @@ class GoalsApiTests(APITestCase):
         self.assertEqual(data['years'][0]['employees_count'], 1)
         self.client.force_authenticate(self.boss)
         self.assertEqual(self.client.get('/dashboard/years/').status_code, 403)
+
+    # --- manager approval of a finished year ---
+
+    def finished_year_goal(self):
+        self.save_goals([goal_input('A', 'Q4', '100', target='4')])
+        Goal.objects.filter(name='A').update(actual_value=Decimal('4'))   # 100% -> rating 4
+
+    def after_the_year(self):
+        return patch('django.utils.timezone.localdate', return_value=date(2027, 1, 5))
+
+    def test_employee_sees_no_ratings_until_the_manager_approves(self):
+        self.finished_year_goal()
+        with self.after_the_year():
+            self.client.force_authenticate(self.sara)
+            mine = self.client.get('/performance/?year=2026').data
+            self.assertEqual(mine['status'], 'pending')
+            self.assertIsNone(mine['overall_score'])
+            self.assertIsNone(mine['goals'][0]['rating'])
+            compare = self.client.get('/performance/compare/?year=2026').data
+            self.assertIsNone(compare['current_score'])
+            self.client.force_authenticate(self.boss)
+            seen = self.client.get(f'/employees/{self.sara.pk}/goals/?year=2026').data
+            self.assertEqual((seen['status'], seen['overall_score']), ('pending', 4.0))
+
+    def test_manager_approves_and_the_employee_then_sees_the_result(self):
+        self.finished_year_goal()
+        with self.after_the_year():
+            self.client.force_authenticate(self.boss)
+            response = self.client.post(f'/team/{self.sara.pk}/approve/', {'year': 2026}, format='json')
+            self.assertEqual(response.status_code, 200, response.data)
+            self.assertEqual(response.data['status'], 'approved')
+            goal = Goal.objects.get(name='A')
+            self.assertEqual(goal.approved_by_id, self.boss.pk)
+            self.assertIsNotNone(goal.approved_at)
+            self.client.force_authenticate(self.sara)
+            mine = self.client.get('/performance/?year=2026').data
+            self.assertEqual((mine['status'], mine['overall_score']), ('approved', 4.0))
+            self.assertEqual(mine['goals'][0]['rating'], 4)
+            again = self.client.post(f'/team/{self.sara.pk}/approve/', {'year': 2026}, format='json')
+            self.assertEqual(again.status_code, 403)   # an employee cannot approve
+            self.client.force_authenticate(self.boss)
+            twice = self.client.post(f'/team/{self.sara.pk}/approve/', {'year': 2026}, format='json')
+            self.assertEqual(twice.status_code, 400)
+
+    def test_cannot_approve_before_the_year_ends_or_without_goals(self):
+        self.finished_year_goal()
+        self.client.force_authenticate(self.boss)
+        early = self.client.post(f'/team/{self.sara.pk}/approve/', {'year': 2026}, format='json')
+        self.assertEqual(early.status_code, 400)
+        self.assertIn('not ended', early.data['detail'])
+        with self.after_the_year():
+            none = self.client.post(f'/team/{self.sara.pk}/approve/', {'year': 2024}, format='json')
+            self.assertEqual(none.status_code, 400)
+            bad = self.client.post(f'/team/{self.sara.pk}/approve/', {'year': 'x'}, format='json')
+            self.assertEqual(bad.status_code, 400)
+
+    def test_only_the_team_manager_can_approve(self):
+        self.finished_year_goal()
+        with self.after_the_year():
+            self.client.force_authenticate(self.boss2)
+            response = self.client.post(f'/team/{self.sara.pk}/approve/', {'year': 2026}, format='json')
+            self.assertEqual(response.status_code, 404)
+            self.client.force_authenticate(self.hr)
+            self.assertEqual(
+                self.client.post(f'/team/{self.sara.pk}/approve/', {'year': 2026}, format='json').status_code, 403,
+            )
+
+    def test_team_list_shows_the_approval_status(self):
+        self.finished_year_goal()
+        self.client.force_authenticate(self.boss)
+        with self.after_the_year():
+            row = next(p for p in self.client.get('/team/?year=2026').data if p['id'] == self.sara.pk)
+            self.assertEqual(row['status'], 'pending')

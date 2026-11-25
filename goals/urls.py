@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    ApproveEvaluationView,
     EmployeeGoalsView,
     EmployeeTasksView,
     GoalActualView,
@@ -22,6 +23,7 @@ urlpatterns = [
     path('performance/compare/', PerformanceCompareView.as_view(), name='performance-compare'),
     path('team/', TeamPerformanceView.as_view(), name='team-performance'),
     path('team/<int:employee_id>/overview/', TeamMemberOverviewView.as_view(), name='team-member-overview'),
+    path('team/<int:employee_id>/approve/', ApproveEvaluationView.as_view(), name='approve-evaluation'),
     path('dashboard/', HRDashboardView.as_view(), name='hr-dashboard'),
     path('dashboard/years/', HRYearsView.as_view(), name='hr-years'),
 ]

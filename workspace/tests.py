@@ -629,7 +629,16 @@ class GoalLinkedTaskTests(WorkspaceApiTestCase):
         progress = self.client.get(self.project_url(self.website)).data['progress']
         self.assertEqual(progress['total_tasks'], 5)
 
-    def test_deleting_a_project_deletes_its_tasks_and_refreshes_goal_scores(self):
+    def test_a_project_with_completed_tasks_cannot_be_deleted(self):
+        self.login(self.manager1)
+        response = self.client.delete(self.project_url(self.website))
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('completed tasks', response.data['detail'])
+        self.assertTrue(Project.objects.filter(pk=self.website.pk).exists())
+        self.assertEqual(Task.objects.filter(project=self.website).count(), 5)
+
+    def test_deleting_a_project_without_completed_tasks_deletes_its_tasks_and_refreshes_goal_scores(self):
+        Task.objects.filter(project=self.website).update(status='todo')
         self.login(self.manager1)
         response = self.client.delete(self.project_url(self.website))
         self.assertEqual(response.status_code, 204)

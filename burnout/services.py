@@ -1,8 +1,10 @@
 """Burnout prediction service.
 
-predict() is the ONLY function the views call. Today it returns fixed dummy
-values; when the two models are ready, only this function changes (the views,
-the URLs and the React pages stay the same).
+predict() is the ONLY function the views call to read a prediction. The model
+runs once per survey, when the employee submits the monthly survey
+(run_prediction); the result is saved in burnoutprediction and its main factors
+in predictionfactor, so predict() only reads the latest saved prediction and the
+history of an employee can be shown.
 
 Response shape (agreed with the team):
     status          'ok' | 'insufficient_data'
@@ -12,21 +14,52 @@ Response shape (agreed with the team):
     missing_inputs  names of the inputs we could not build
     predicted_at    'YYYY-MM-DD'
 """
+import logging
+from decimal import Decimal
+
+from django.db import transaction
 from django.utils import timezone
 
-from accounts.models import Employee
+from accounts.models import BurnoutPrediction, BurnoutSurvey, Employee, PredictionFactor
 from goals.services import team_of
 
-LEVELS = ('Low', 'Moderate', 'High', 'Severe')
+from . import bat, combined, inputs
 
-# TODO(step 2): replace with the real input builder.
-DUMMY_SCORE = 6.4
-DUMMY_LEVEL = 'High'
-DUMMY_FACTORS = [
-    {'name': 'Weekly hours', 'direction': 'increases', 'contribution': 0.8},
-    {'name': 'Meetings per week', 'direction': 'increases', 'contribution': 0.5},
-    {'name': 'Leave days taken', 'direction': 'decreases', 'contribution': 0.3},
-]
+logger = logging.getLogger(__name__)
+
+LEVELS = ('Low', 'Moderate', 'High', 'Severe')
+MAIN_FACTORS = 3
+HISTORY_LIMIT = 12
+
+# model input name -> name shown to the manager
+FACTOR_LABELS = {
+    'age': 'Age',
+    'gender': 'Gender',
+    'country': 'Country',
+    'job_role': 'Job role',
+    'seniority_level': 'Seniority level',
+    'years_experience': 'Years of experience',
+    'years_at_company': 'Years at the company',
+    'company_size': 'Company size',
+    'industry': 'Industry',
+    'work_mode': 'Work mode',
+    'salary_usd': 'Salary',
+    'team_size': 'Team size',
+    'therapy_access': 'Therapy access',
+    'uses_therapy': 'Uses therapy',
+    'work_hours_per_week': 'Weekly work hours',
+    'deadline_pressure_score': 'Deadline pressure',
+    'stress_score': 'Stress',
+    'work_life_balance_score': 'Work interfering with personal life',
+    'meetings_per_day': 'Meetings per day',
+    'sleep_hours_per_night': 'Sleep hours',
+    'vacation_days_taken': 'Vacation days taken',
+    'social_support_score': 'Support from colleagues',
+    'manager_support_score': 'Support from manager',
+    'exercise_days_per_week': 'Exercise days per week',
+    'autonomy_score': 'Control over own work',
+    'ai_tools_daily': 'Uses AI tools',
+}
 
 
 def _today():
@@ -44,16 +77,124 @@ def insufficient(missing):
     }
 
 
-def predict(employee):
-    """Return the prediction for one Employee row (dummy values for now)."""
+def _factor(name, contribution):
+    contribution = float(contribution)
+    return {
+        'name': FACTOR_LABELS.get(name, name),
+        'direction': 'increases' if contribution > 0 else 'decreases',
+        'contribution': round(abs(contribution), 2),
+    }
+
+
+def _latest_survey(employee):
+    return (
+        BurnoutSurvey.objects.filter(employee_id=employee.pk)
+        .order_by('-submission_date', '-survey_id')
+        .first()
+    )
+
+
+def run_prediction(employee, survey=None, today=None):
+    """Run the model for one employee with the answers of the latest survey and
+    save the prediction and its main factors. Returns the BurnoutPrediction, or
+    None when stress_score is missing (without it the model is not reliable).
+
+    Writes to burnoutprediction and predictionfactor (one prediction per survey)."""
+    from .predictor import get_predictor
+
+    today = today or timezone.localdate()
+    survey = survey if survey is not None else _latest_survey(employee)
+    values, _missing = inputs.build(employee, survey, today)
+    if 'stress_score' not in values:
+        return None
+
+    result = get_predictor().predict(values, top_n=MAIN_FACTORS)
+    with transaction.atomic():
+        prediction = BurnoutPrediction.objects.create(
+            employee_id=employee.pk,
+            prediction_date=today,
+            risk_score=Decimal(str(result['burnout_score'])),
+            risk_level=result['burnout_level'],
+        )
+        PredictionFactor.objects.bulk_create([
+            PredictionFactor(
+                prediction=prediction,
+                factor_name=factor['feature'],
+                contribution=Decimal(str(factor['impact'])),   # signed: + raises the risk, - lowers it
+            )
+            for factor in result['top_factors']
+        ])
+    return prediction
+
+
+def run_prediction_safely(employee, survey=None):
+    """run_prediction, but a failure is logged and never breaks the survey that
+    has already been saved."""
+    try:
+        return run_prediction(employee, survey)
+    except Exception:
+        logger.exception('Burnout prediction failed for employee %s', employee.pk)
+        return None
+
+
+def _latest_prediction(employee):
+    return (
+        BurnoutPrediction.objects.filter(employee_id=employee.pk)
+        .order_by('-prediction_date', '-predicted_id')
+        .first()
+    )
+
+
+def _as_dict(prediction, missing):
+    factors = list(prediction.factors.all())
+    factors.sort(key=lambda f: abs(f.contribution), reverse=True)
     return {
         'status': 'ok',
-        'score': DUMMY_SCORE,
-        'level': DUMMY_LEVEL,
-        'top_factors': [dict(f) for f in DUMMY_FACTORS],
-        'missing_inputs': [],
-        'predicted_at': _today(),
+        'score': float(prediction.risk_score),
+        'level': prediction.risk_level,
+        'top_factors': [_factor(f.factor_name, f.contribution) for f in factors],
+        'missing_inputs': list(missing),
+        'predicted_at': prediction.prediction_date.isoformat(),
     }
+
+
+def predict(employee):
+    """The latest saved prediction of one Employee row (reads only).
+
+    Employees who have not sent the monthly survey have none: the answer is then
+    'insufficient_data'."""
+    prediction = _latest_prediction(employee)
+    if prediction is None:
+        return insufficient(['monthly survey'])
+    _values, system_missing = inputs.system_inputs(employee, timezone.localdate())
+    return _as_dict(prediction, system_missing)
+
+
+def assessment(employee, prediction):
+    """The latest BAT result and the overall reading for a manager's list. Reads
+    only. `prediction` is the dict returned by predict(employee)."""
+    survey = _latest_survey(employee)
+    if survey is None or survey.overall_score is None:
+        return {'bat': None, 'combined': None}
+    zone = bat.zone('total', survey.overall_score)
+    return {
+        'bat': {
+            'score': float(survey.overall_score),
+            'zone': zone,
+            'date': survey.submission_date.isoformat() if survey.submission_date else None,
+        },
+        'combined': combined.combine(prediction.get('level'), zone),
+    }
+
+
+def history(employee, limit=HISTORY_LIMIT):
+    """The saved predictions of one employee, newest first, with the BAT result
+    of the same survey period when there is one. Reads only."""
+    rows = list(
+        BurnoutPrediction.objects.filter(employee_id=employee.pk)
+        .order_by('-prediction_date', '-predicted_id')[:limit]
+    )
+    return [{**_as_dict(row, []), 'id': row.pk} for row in rows]
 
 
 def can_view(user, employee_id):

@@ -679,7 +679,7 @@ function MemberDetails({ id, onBack }) {
 
           <Panel
             title="Performance"
-            hint={perf.overall_score === null ? `No score in ${year}` : `${perf.overall_score.toFixed(2)} / 5 in ${year}${perf.is_final ? ' · Final' : ''}`}
+            hint={perf.overall_score === null ? `No score in ${year}` : `${perf.overall_score.toFixed(2)} / 5 in ${year}${perf.status === 'approved' ? ' · Approved' : perf.status === 'pending' ? ' · Pending approval' : perf.is_final ? ' · Final' : ''}`}
           >
             {perf.goals.length === 0 ? (
               <p className="ws-hint" style={{ padding: 16 }}>No KPI goals for {year}.</p>
