@@ -241,7 +241,7 @@ class ProjectDetailView(APIView):
         # the recommendations use.
         if Task.objects.filter(project=project, status=COMPLETED).exists():
             return Response(
-                {'detail': 'This project has completed tasks, so it cannot be deleted.'},
+                {'detail': 'This project has completed tasks, so it cannot be deleted. Completed tasks count toward employees\' KPI goals and experience history.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         # Task.project is PROTECT, so the other tasks are deleted first, in the same

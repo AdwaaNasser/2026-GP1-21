@@ -294,8 +294,7 @@ function DetailsContent({ role }) {
 <button
   className="ws-btn ws-btn-outline-danger"
   type="button"
-  disabled={deleting || completedTaskCount > 0}
-  title={completedTaskCount > 0 ? 'A project with completed tasks cannot be deleted' : undefined}
+  disabled={deleting}
   onClick={() => setConfirmingDelete(true)}
 >
   <Icon name="x" size={15} />
@@ -423,9 +422,12 @@ function DetailsContent({ role }) {
       )}
       {isManager && confirmingDelete && (
         <ConfirmDialog
-          title={taskCount ? 'Delete this project and its tasks?' : 'Delete project'}
+          title={completedTaskCount > 0 ? 'This project cannot be deleted' : taskCount ? 'Delete this project and its tasks?' : 'Delete project'}
+          cancelLabel={completedTaskCount > 0 ? 'Close' : 'Cancel'}
           message={
-            taskCount
+            completedTaskCount > 0
+              ? "This project has completed tasks, so it cannot be deleted. Completed tasks count toward employees' KPI goals and experience history."
+              : taskCount
               ? `"${project.name}" has ${taskCount} task${taskCount === 1 ? '' : 's'}. Deleting the project will also permanently delete ${taskCount === 1 ? 'it' : 'all of them'}.${linkedTaskCount ? ` ${linkedTaskCount} of these tasks count toward employee goals, so those goals may lose progress.` : ''} This cannot be undone.`
               : `Delete "${project.name}"? This cannot be undone.`
           }
@@ -434,7 +436,7 @@ function DetailsContent({ role }) {
           busy={deleting}
           error={deleteError}
           onCancel={cancelDeleteProject}
-          onConfirm={deleteProject}
+          onConfirm={completedTaskCount > 0 ? undefined : deleteProject}
         />
       )}
 

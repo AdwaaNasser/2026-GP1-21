@@ -384,6 +384,7 @@ export function ConfirmDialog({
   children,
   onConfirm,
   onCancel,
+  cancelLabel = 'Cancel',
 }) {
   return createPortal(
     <Modal title={title} onClose={busy ? noop : onCancel}>
@@ -391,11 +392,13 @@ export function ConfirmDialog({
       <p className="ws-description">{message}</p>
       {children}
       <div className="ws-form-actions">
-        <button className={`ws-btn ${danger ? 'ws-btn-danger' : 'ws-btn-primary'}`} type="button" disabled={busy} onClick={onConfirm}>
-          {busy ? busyLabel : confirmLabel}
-        </button>
+        {onConfirm && (
+          <button className={`ws-btn ${danger ? 'ws-btn-danger' : 'ws-btn-primary'}`} type="button" disabled={busy} onClick={onConfirm}>
+            {busy ? busyLabel : confirmLabel}
+          </button>
+        )}
         <button className="ws-btn ws-btn-secondary" type="button" disabled={busy} onClick={onCancel}>
-          Cancel
+          {cancelLabel}
         </button>
       </div>
     </Modal>,
