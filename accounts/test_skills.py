@@ -45,24 +45,10 @@ class SkillViewTests(SimpleTestCase):
         force_authenticate(request, user=SimpleNamespace(role=role, is_authenticated=True, pk=5, org_id=1, department='IT'))
         return view.as_view()(request, **kwargs)
 
-    def test_only_managers_add_a_skill_to_the_list(self):
-        self.assertEqual(self.call(skills.SkillCatalogView, 'post', 'Employee', {'name': 'Go'}).status_code, 403)
-        self.assertEqual(self.call(skills.SkillCatalogView, 'post', 'HR', {'name': 'Go'}).status_code, 403)
-
-    def test_duplicate_or_empty_skill_name_is_refused(self):
-        with patch.object(skills, 'Skill') as table:
-            table.objects.filter.return_value.exists.return_value = True
-            self.assertEqual(self.call(skills.SkillCatalogView, 'post', 'Manager', {'name': 'python'}).status_code, 400)
-            self.assertEqual(self.call(skills.SkillCatalogView, 'post', 'Manager', {'name': '  '}).status_code, 400)
-        table.objects.create.assert_not_called()
-
-    def test_new_skill_is_added(self):
-        with patch.object(skills, 'Skill') as table:
-            table.objects.filter.return_value.exists.return_value = False
-            table.objects.create.return_value = SimpleNamespace(pk=9, name='Go')
-            response = self.call(skills.SkillCatalogView, 'post', 'Manager', {'name': ' Go '})
-        self.assertEqual(response.status_code, 201)
-        table.objects.create.assert_called_once_with(name='Go')
+    def test_nobody_adds_a_skill_from_the_website(self):
+        # The catalogue grows only with `manage.py add_skill`.
+        for role in ('Employee', 'Manager', 'HR'):
+            self.assertEqual(self.call(skills.SkillCatalogView, 'post', role, {'name': 'Go'}).status_code, 405)
 
     def test_only_employees_have_their_own_skills(self):
         for role in ('Manager', 'HR'):

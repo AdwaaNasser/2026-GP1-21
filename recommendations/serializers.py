@@ -25,11 +25,8 @@ class RecommendRequestSerializer(serializers.Serializer):
         ids = [s['skill_id'] for s in skills]
         if len(ids) != len(set(ids)):
             raise serializers.ValidationError('Each skill can only be listed once.')
-        # Only skills that someone in the manager's team has (the skills table is shared).
-        found = set(
-            services.team_skills(self.context['manager'])
-            .filter(pk__in=ids).values_list('pk', flat=True)
-        )
+        # Only skills from the controlled catalogue.
+        found = set(services.catalogue_skills().filter(pk__in=ids).values_list('pk', flat=True))
         unknown = [i for i in ids if i not in found]
         if unknown:
             raise serializers.ValidationError(f'Unknown skill: {unknown}')

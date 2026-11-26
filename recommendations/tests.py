@@ -311,29 +311,27 @@ class RecommendApiTests(APITestCase):
         response = APIClient().post(reverse('recommend-employees'), {}, format='json')
         self.assertIn(response.status_code, (401, 403))
 
-    def test_skills_of_another_company_are_hidden_and_refused(self):
-        # A second company with its own skill: manager1 must not see or use it.
+    def test_skills_come_from_the_shared_catalogue(self):
+        # Every catalogue skill can be required, even if no one in the team has it yet.
+        sql = Skill.objects.create(name='SQL')
+        self.client.force_authenticate(self.manager1)
+        names = [s['name'] for s in self.client.get(reverse('recommend-skills')).data]
+        self.assertIn('SQL', names)
+        self.assertEqual(self.ask(self.manager1, skills=[{'skill_id': sql.pk}]).status_code, 200)
+
+    def test_unknown_skill_is_refused(self):
+        self.assertEqual(self.ask(self.manager1, skills=[{'skill_id': 999999}]).status_code, 400)
+
+    def test_employees_of_another_company_are_never_recommended(self):
+        # The catalogue is shared, but people stay inside their own company.
         other_org = Organization.objects.create(name='Other Co')
         stranger = Employee.objects.create(
             user=make_user(other_org, 'x@other.test', 'Employee'), system_role='Employee', hire_date=date(2024, 1, 1))
-        cobol = Skill.objects.create(name='Cobol')
-        EmployeeSkill.objects.create(employee=stranger, skill=cobol, skill_level='expert')
-        self.client.force_authenticate(self.manager1)
-        names = [s['name'] for s in self.client.get(reverse('recommend-skills')).data]
-        self.assertNotIn('Cobol', names)
-        self.assertEqual(self.ask(self.manager1, skills=[{'skill_id': cobol.pk}]).status_code, 400)
-
-    def test_skills_of_another_department_are_hidden_and_refused(self):
-        # Same company, other team: manager1 must not see or use their skills.
-        sql = Skill.objects.create(name='SQL')
-        EmployeeSkill.objects.create(employee=self.other, skill=sql, skill_level='expert')
-        self.client.force_authenticate(self.manager1)
-        names = [s['name'] for s in self.client.get(reverse('recommend-skills')).data]
-        self.assertNotIn('SQL', names)
-        self.assertEqual(self.ask(self.manager1, skills=[{'skill_id': sql.pk}]).status_code, 400)
-        self.client.force_authenticate(self.manager2)
-        names = [s['name'] for s in self.client.get(reverse('recommend-skills')).data]
-        self.assertIn('SQL', names)
+        EmployeeSkill.objects.create(employee=stranger, skill=self.python, skill_level='expert')
+        response = self.ask(self.manager1, skills=[{'skill_id': self.python.pk}])
+        self.assertEqual(response.status_code, 200)
+        names = [p['first_name'] for p in response.data['recommended'] + response.data['excluded']]
+        self.assertNotIn(stranger.user.first_name, names)
 
     def test_manager_gets_the_skill_list(self):
         self.client.force_authenticate(self.manager1)

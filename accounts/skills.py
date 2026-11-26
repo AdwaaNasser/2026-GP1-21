@@ -1,12 +1,12 @@
 """Skills of the employees (tables skills and employee_skills).
 
-The employee chooses their skills from the list of the organization (a drop-down,
+The employee chooses their skills from the controlled skills catalogue (a drop-down,
 never free text, so "Python" and "python" are not two skills) and sets the level
-of each one. The level is never raised automatically: the employee or the
+of each one. Nobody adds skills from the website: the catalogue is filled with
+`manage.py import_skill_catalogue` and grows only with `manage.py add_skill`. The level is never raised automatically: the employee or the
 manager changes it by hand.
 
   GET  /api/accounts/skills/catalog/           the list to choose from
-  POST /api/accounts/skills/catalog/           manager: add a new skill to the list
   GET  /api/accounts/skills/mine/              my skills
   PUT  /api/accounts/skills/mine/              replace my skills (employee)
   GET  /api/accounts/skills/employee/<id>/     a team member's skills (manager)
@@ -77,18 +77,6 @@ class SkillCatalogView(APIView):
             return Response({'detail': 'Only employees and managers use skills.'}, status=status.HTTP_403_FORBIDDEN)
         skills = Skill.objects.order_by('name').values_list('skill_id', 'name')
         return Response([{'id': skill_id, 'name': name} for skill_id, name in skills])
-
-    def post(self, request):
-        if request.user.role != 'Manager':
-            return Response({'detail': 'Only managers can add a skill to the list.'}, status=status.HTTP_403_FORBIDDEN)
-        name = request.data.get('name') if hasattr(request.data, 'get') else None
-        name = name.strip() if isinstance(name, str) else ''
-        if not name or len(name) > 255:
-            return Response({'name': 'Enter the skill name.'}, status=status.HTTP_400_BAD_REQUEST)
-        if Skill.objects.filter(name__iexact=name).exists():
-            return Response({'name': f'{name} is already in the list.'}, status=status.HTTP_400_BAD_REQUEST)
-        skill = Skill.objects.create(name=name)
-        return Response({'id': skill.pk, 'name': skill.name}, status=status.HTTP_201_CREATED)
 
 
 class MySkillsView(APIView):

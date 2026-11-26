@@ -35,10 +35,10 @@ class RecommendEmployeesView(APIView):
 
 
 class SkillListView(APIView):
-    """GET: the skills someone in the manager's team has, to choose from when asking for recommendations."""
+    """GET: the skills catalogue, to choose the skills a task needs."""
 
     permission_classes = [IsManager]
 
     def get(self, request):
-        skills = services.team_skills(request.user).order_by('name').values_list('skill_id', 'name')
+        skills = services.catalogue_skills().order_by('name').values_list('skill_id', 'name')
         return Response([{'id': skill_id, 'name': name} for skill_id, name in skills])

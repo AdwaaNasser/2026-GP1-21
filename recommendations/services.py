@@ -37,11 +37,18 @@ def team_of(manager_user):
     ]
 
 
+def catalogue_skills():
+    """The controlled skills catalogue: one shared list (imported from ESCO;
+    new skills are added only with `manage.py add_skill`). Employees and managers only choose from it, so
+    the skill an employee has and the skill a task needs are the same record.
+    It holds no company data; each company's employees and tasks stay separate."""
+    return Skill.objects.all()
+
+
 def team_skills(manager_user):
-    """Skills that someone in the manager's team has. The skills table is shared
-    by every company, so the manager only sees and uses the skills of their team."""
-    ids = [employee.pk for employee in team_of(manager_user)]
-    return Skill.objects.filter(employee_records__employee_id__in=ids).distinct()
+    """Kept for older callers: every catalogue skill can now be required by a task,
+    even if no one in the team has it yet."""
+    return catalogue_skills()
 
 
 def work_histories(employee_ids):

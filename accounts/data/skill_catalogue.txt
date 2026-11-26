@@ -1,0 +1,230 @@
+# Bayyinah controlled skills catalogue (Release 2: 200 skills)
+#
+# One skill per line:   Display name | ESCO label to match
+# The ESCO label is optional. Without it, the display name is looked up in ESCO.
+# Lines starting with "#" are notes, and "## " starts a category (for reading only).
+#
+# Import:  python manage.py import_skill_catalogue --esco path/to/skills_en.csv
+# Any line not found in ESCO is listed, so you can fix its label or remove it.
+# Release 2 lines have no ESCO label yet; tool names (Flutter, AWS...) may not be in ESCO.
+# Import them without --esco, or add the right label after the dry run.
+
+## Software development
+Python | Python (computer programming)
+Java | Java (computer programming)
+JavaScript | JavaScript
+TypeScript | TypeScript
+C# | C#
+C++ | C++
+PHP | PHP
+SQL | SQL
+HTML | HTML
+CSS | CSS
+React | React
+Django | Django
+Node.js | Node.js
+REST APIs | application programming interface
+Git | Git
+Software testing | perform software tests
+Debugging | debug software
+Software design | create software design
+Mobile app development | mobile device software frameworks
+Agile development | agile project management
+Scrum | Scrum
+Kotlin
+Swift
+Flutter
+React Native
+Angular
+Vue.js
+Next.js
+Spring Boot
+.NET
+Laravel
+FastAPI
+GraphQL
+Android development
+iOS development
+Microservices
+Data structures and algorithms
+Unit testing
+Test automation
+Jira
+Technical documentation
+
+## Databases
+PostgreSQL
+MySQL
+Oracle Database
+Microsoft SQL Server
+MongoDB
+Firebase
+Database administration
+Data modelling
+
+## Data and AI
+Data analysis | analyse data
+Data visualisation | data visualisation software
+Statistics | statistics
+Machine learning | machine learning
+Data mining | data mining
+Database design | design database scheme
+Excel | use spreadsheets software
+Power BI | Power BI
+Business intelligence | business intelligence
+R
+pandas
+scikit-learn
+TensorFlow
+PyTorch
+Deep learning
+Natural language processing
+Computer vision
+Generative AI
+Prompt engineering
+Recommender systems
+Predictive modelling
+Data engineering
+ETL
+Tableau
+
+## IT infrastructure and security
+Cloud computing | cloud technologies
+Linux | Linux
+Networking | ICT network administration
+Cybersecurity | cyber security
+Technical support | provide ICT system user support
+System administration | ICT system administration
+DevOps | DevOps
+Docker | Docker
+AWS
+Microsoft Azure
+Google Cloud Platform
+Kubernetes
+CI/CD
+Active Directory
+Microsoft 365 administration
+IT service management (ITIL)
+Network security
+Penetration testing
+Incident response
+Identity and access management
+Data protection (PDPL)
+
+## Design
+UI design | user interface design
+UX design | user experience design
+Graphic design | graphic design
+Figma | Figma
+Adobe Photoshop
+Adobe Illustrator
+Canva
+Wireframing
+Prototyping
+User research
+Video editing
+
+## Finance and accounting
+Accounting | accounting
+Bookkeeping | bookkeeping
+Budget management | manage budgets
+Financial analysis | financial analysis
+Financial reporting | prepare financial statements
+Payroll | manage payroll
+Auditing | auditing techniques
+Tax | tax legislation
+Invoicing | issue sales invoices
+Financial modelling
+Forecasting
+Accounts payable
+Accounts receivable
+IFRS
+VAT
+Zakat
+ERP systems
+SAP
+
+## Human resources
+Recruitment | recruit employees
+Interviewing | interview people
+Onboarding | onboard employees
+Performance appraisal | assess employees
+Training delivery | train employees
+Labour law | labour legislation
+HR administration | human resource management
+Employee relations | employee relations
+Compensation and benefits
+Workforce planning
+HR analytics
+Learning and development
+Succession planning
+Employee engagement
+Saudisation (Nitaqat)
+
+## Sales, marketing and customer service
+Sales | sales activities
+Negotiation | negotiate sales contracts
+Customer service | customer service
+Account management | perform account management
+Digital marketing | digital marketing techniques
+Social media marketing | social media management
+Content writing | write content
+Search engine optimisation | search engine optimisation
+Market research | perform market research
+Public relations | public relations
+Branding | brand marketing techniques
+CRM
+Salesforce
+Lead generation
+E-commerce
+Customer success
+Marketing strategy
+Copywriting
+Google Ads
+Google Analytics
+
+## Operations and projects
+Project management | project management
+Risk management | risk management
+Quality assurance | quality assurance procedures
+Procurement | procurement processes
+Supply chain management | supply chain management
+Inventory management | manage inventory
+Logistics | logistics
+Process improvement | identify process improvements
+Business analysis | business analysis
+Requirements gathering | define technical requirements
+Report writing | write work-related reports
+Document management | document management
+Product management
+Stakeholder management
+Change management
+Strategic planning
+Vendor management
+Contract management
+Compliance
+Lean Six Sigma
+Health and safety
+Office administration
+
+## Working with others
+Communication | communication
+Teamwork | work in teams
+Leadership | lead others
+Time management | manage time
+Problem solving | solve problems
+Critical thinking | think critically
+Presentation skills | make presentations
+Planning | plan
+Decision making | make decisions
+Arabic | Arabic
+English | English
+Emotional intelligence
+Adaptability
+Creativity
+Attention to detail
+Conflict resolution
+Coaching and mentoring
+Microsoft Word
+Microsoft PowerPoint
+French
