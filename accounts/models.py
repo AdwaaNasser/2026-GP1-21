@@ -38,6 +38,7 @@ class UserManager(BaseUserManager):
         gender=None,
         job_title=None,
         allowed_absence_days=None,
+        seniority_level=None,
     ):
         if not email:
             raise ValueError('Users must have an email address.')
@@ -58,6 +59,7 @@ class UserManager(BaseUserManager):
             department=department,
             gender=gender,
             job_title=job_title,
+            seniority_level=seniority_level,
             allowed_absence_days=allowed_absence_days,
         )
         if password:

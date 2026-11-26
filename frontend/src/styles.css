@@ -5318,3 +5318,83 @@ html:has(.lx) { scroll-behavior: smooth; }
 .bt-guide-body li .bt-overall-chip, .bt-guide-body li .bt-level, .bt-guide-body li .bt-bat { margin-right: 6px; }
 .bt-guide-note { grid-column: 1 / -1; margin: 0; }
 @media (max-width: 860px) { .bt-guide-body { grid-template-columns: minmax(0, 1fr); } }
+
+
+/* ==========================================================================
+   Profile page (Profile.jsx)
+   Only "pf-" classes. The cards themselves are the normal ws-card, so the page
+   matches the rest of the workspace and the SkillsEditor card fits in as it is.
+   ========================================================================== */
+
+.pf-page { display: grid; gap: 18px; }
+.pf-loading { color: var(--ws-muted); }
+
+.pf-header {
+  display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; align-items: center; gap: 18px;
+  padding: 20px 22px;
+}
+.pf-avatar {
+  display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%;
+  background: var(--p-900, #43338A); color: #FFFFFF;
+  font-family: var(--f-display); font-size: 22px; font-weight: 800;
+}
+.pf-header-text h2 { margin: 0; color: var(--p-900, #43338A); font-family: var(--f-display); font-size: 24px; font-weight: 800; letter-spacing: -0.02em; }
+.pf-header-text p { margin: 2px 0 0; color: var(--ws-muted); }
+.pf-tags { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.pf-tags li {
+  padding: 4px 12px; border-radius: 99px; background: var(--p-50, #F2EFFC);
+  color: var(--p-900, #43338A); font-size: 13px; font-weight: 700;
+}
+
+.pf-grid { display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); gap: 18px; align-items: start; }
+.pf-col { display: grid; gap: 18px; align-content: start; min-width: 0; }
+
+.pf-details { display: grid; margin: 0; padding: 4px 18px 10px; }
+.pf-detail {
+  display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 12px;
+  padding: 11px 0; border-top: 1px solid var(--ws-border);
+}
+.pf-detail:first-child { border-top: 0; }
+.pf-detail dt { color: var(--ws-muted); font-size: 13.5px; }
+.pf-detail dd { margin: 0; overflow-wrap: anywhere; font-weight: 600; }
+.pf-empty { color: var(--ws-subtle); font-weight: 500; }
+/* Full width (managers and HR, no Skills card): the details sit in two columns. */
+.pf-details-wide { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 40px; }
+.pf-details-wide .pf-detail:nth-child(2) { border-top: 0; }
+
+.pf-hint { margin: 0; padding: 12px 14px; border-radius: 8px; background: var(--p-50, #F2EFFC); color: var(--ws-muted); font-size: 13.5px; }
+
+@media (max-width: 960px) {
+  .pf-grid { grid-template-columns: minmax(0, 1fr); }
+  .pf-details-wide { grid-template-columns: minmax(0, 1fr); }
+  .pf-details-wide .pf-detail:nth-child(2) { border-top: 1px solid var(--ws-border); }
+}
+
+@media (max-width: 560px) {
+  .pf-header { grid-template-columns: 52px minmax(0, 1fr); }
+  .pf-avatar { width: 52px; height: 52px; font-size: 18px; }
+  .pf-tags { grid-column: 1 / -1; }
+  .pf-detail { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  /* The SkillsEditor rows have fixed columns; stack them on phones. */
+  .pf-skills .skills-list li { grid-template-columns: minmax(0, 1fr) !important; }
+}
+
+/* Skills editor: searchable skills drop-down (sk-) */
+.sk-combo { position: relative; max-width: 420px; margin-top: 16px; }
+.sk-combo-input { padding-right: 34px; cursor: pointer; }
+.sk-combo-input:focus { cursor: text; }
+.sk-combo-arrow {
+  position: absolute; top: 50%; right: 13px; width: 8px; height: 8px; margin-top: -6px;
+  border-right: 2px solid var(--ws-muted); border-bottom: 2px solid var(--ws-muted);
+  transform: rotate(45deg); pointer-events: none;
+}
+.sk-list {
+  position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; right: 0;
+  max-height: 280px; margin: 0; padding: 6px; overflow-y: auto; list-style: none;
+  border: 1px solid var(--ws-border); border-radius: 10px; background: var(--ws-surface); box-shadow: var(--ws-shadow);
+}
+.sk-option { padding: 9px 12px; border-radius: 6px; color: var(--ws-text); font-size: 14px; cursor: pointer; }
+.sk-option.is-active { background: var(--ws-accent-soft); }
+.sk-list-empty { padding: 10px 12px; color: var(--ws-muted); font-size: 13px; }
+.sk-save { justify-content: flex-end; margin-top: 16px; }
+.sk-unsaved { margin-right: auto; color: var(--ws-muted); font-size: 13px; }

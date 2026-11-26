@@ -1035,13 +1035,13 @@ export function Recommendation({ form, onPick, onSkillsChange }) {
   const skillName = (id) => (allSkills.find((s) => String(s.id) === String(id)) || {}).name || '';
   const unused = allSkills.filter((s) => !wanted.some((w) => String(w.skill_id) === String(s.id)));
 
-  // The manager types a skill name; it must match a skill someone in the team has.
+  // The manager types a skill name; it must match a skill in the skills catalogue.
   function addTypedSkill() {
     const name = typed.trim().toLowerCase();
     if (!name) return;
     const skill = allSkills.find((s) => s.name.trim().toLowerCase() === name);
     if (!skill) {
-      setError(`No one in your team has "${typed.trim()}". Check the spelling or pick a suggestion.`);
+      setError(`"${typed.trim()}" is not in the skill list. Check the spelling or pick a suggestion.`);
       return;
     }
     if (wanted.some((w) => String(w.skill_id) === String(skill.id))) {
@@ -1169,7 +1169,7 @@ export function Recommendation({ form, onPick, onSkillsChange }) {
           </button>
         </div>
         {allSkills.length === 0 && (
-          <span className="ws-hint">No one in your team has skills saved yet.</span>
+          <span className="ws-hint">The skill list is empty. Ask the system administrator to import the skills catalogue.</span>
         )}
       </div>
 
@@ -1346,6 +1346,9 @@ export function Shell({ role, title, subtitle, breadcrumbs = [], children }) {
   }
 
   const items = LINKS[role];
+  // The logo opens the person's own Overview. "/" is the public landing page,
+  // which shows "Log in" and looks like the person was logged out.
+  const homePath = items[0][0];
   const current = items.find(([path]) => isActive(path));
   const pageIcon = current ? current[2] : 'layout';
   const roleName = login.user.role_label || login.user.role;
@@ -1354,7 +1357,7 @@ export function Shell({ role, title, subtitle, breadcrumbs = [], children }) {
   return (
     <div className="ws-app">
       <aside className="ws-sidebar">
-        <a className="ws-brand" href="/" aria-label="Bayyinah home">
+        <a className="ws-brand" href={homePath} aria-label="Bayyinah, go to Overview">
           <img src="/bayyinah-logo.png" alt="" />
           <span>Bayyinah</span>
         </a>
@@ -1412,7 +1415,7 @@ export function Shell({ role, title, subtitle, breadcrumbs = [], children }) {
         </div>
         <footer className="ws-footer ws-footer-slim">
           <span className="ws-footer-copy">© 2026 Bayyinah Platform. All rights reserved.</span>
-          <a className="brand brand-light ws-footer-brand" href="/" aria-label="Bayyinah home">
+          <a className="brand brand-light ws-footer-brand" href={homePath} aria-label="Bayyinah, go to Overview">
             <img className="brand-logo" src="/bayyinah-logo.png" alt="" />
             <span className="brand-word">
               <span className="brand-latin">Bayyinah</span>

@@ -5,6 +5,7 @@ import { Dashboard, DashboardRouter } from './Dashboard.jsx';
 import { EmployeeWellbeing, HRBurnout, ManagerBurnout } from './Burnout.jsx';
 import { Home } from './Home.jsx';
 import { EmployeePerformance, HRPerformance, ManagerGoals } from './Performance.jsx';
+import { Profile } from './Profile.jsx';
 import { HrTeam, ManagerTeam } from './Team.jsx';
 import { enhanceSelects } from './ui.jsx';
 import { EmployeeTasks, ManagerProjects, ManagerTasks, ProjectDetails } from './Work.jsx';
@@ -34,6 +35,7 @@ const pages = {
   '/hr/team': HrTeam,
   '/hr/employees': HrTeam, // the old Manage employees page now lives in Import team
   '/employee/project': () => <ProjectDetails role="Employee" />,
+  '/profile': Profile,
 };
 
 const Page = pages[window.location.pathname] || Home;
