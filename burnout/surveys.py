@@ -1,5 +1,7 @@
 """Saving the BAT survey (table burnoutsurvey) and the one-survey-per-period rule.
 
+How often the survey opens is set by HR per organization (see current_window).
+
 Writes ONE row per submitted survey into the existing table burnoutsurvey
 (no schema change). The row holds the four dimension scores, the overall score,
 the submission date and the 10 answers used by the burnout prediction model
@@ -16,12 +18,20 @@ from accounts.models import BurnoutSurvey, Employee
 
 from . import bat
 
-# Length of one survey period, in calendar months: 1 = monthly, 3 = quarterly.
-PERIOD_MONTHS = 1
+# HR chooses how often the survey opens (Organization.survey_frequency).
+# Length of one period in calendar months; 'manual' has no fixed length: the
+# survey is open from the day HR sends it (Organization.survey_opened_on).
+FREQUENCY_MONTHS = {'monthly': 1, 'quarterly': 3, 'semiannual': 6}
+DEFAULT_FREQUENCY = 'quarterly'
+PERIOD_MONTHS = FREQUENCY_MONTHS[DEFAULT_FREQUENCY]
 
 
 class AlreadySubmitted(Exception):
     """The employee already submitted the survey in the current period."""
+
+
+class SurveyClosed(Exception):
+    """Manual mode and HR has not sent a survey yet."""
 
 
 def period_start(day, months=PERIOD_MONTHS):
@@ -36,44 +46,68 @@ def next_period_start(day, months=PERIOD_MONTHS):
     return date(index // 12, index % 12 + 1, 1)
 
 
-def submission_in_period(employee, today):
+def current_window(employee, today):
+    """The period the employee's organization is in now, as
+    {'since': first day of the period, 'next': first day of the next one}.
+    Manual mode: 'since' is the day HR sent the survey and 'next' is None.
+    Returns None when the mode is manual and nothing was sent yet. Read only."""
+    org = employee.user.org
+    frequency = org.survey_frequency or DEFAULT_FREQUENCY
+    if frequency == 'manual':
+        if org.survey_opened_on is None:
+            return None
+        return {'since': org.survey_opened_on, 'next': None}
+    months = FREQUENCY_MONTHS.get(frequency, PERIOD_MONTHS)
+    return {'since': period_start(today, months), 'next': next_period_start(today, months)}
+
+
+def submission_in_period(employee, today, window=None):
     """The employee's survey row in the current period, or None. Read only."""
+    window = window or current_window(employee, today)
+    if window is None:
+        return None
     return (
         BurnoutSurvey.objects
-        .filter(employee_id=employee.pk, submission_date__gte=period_start(today))
+        .filter(employee_id=employee.pk, submission_date__gte=window['since'])
         .order_by('-submission_date', '-survey_id')
         .first()
     )
 
 
-def _status(row, today):
+def _status(row, window):
+    if window is None:
+        return {'status': 'closed', 'submitted_on': None, 'next_available': None}
     if row is None:
         return {'status': 'available', 'submitted_on': None, 'next_available': None}
     return {
         'status': 'submitted',
         'submitted_on': row.submission_date.isoformat(),
-        'next_available': next_period_start(today).isoformat(),
+        'next_available': window['next'].isoformat() if window['next'] else None,
     }
 
 
 def status_for(employee, today=None):
     today = today or timezone.localdate()
-    return _status(submission_in_period(employee, today), today)
+    window = current_window(employee, today)
+    return _status(submission_in_period(employee, today, window), window)
 
 
 def submit(employee, answers, model_answers, today=None):
     """Score the BAT answers, add the model answers and save one row.
 
     `model_answers` is the cleaned dict from model_inputs.validate (all 10
-    questions). Raises AlreadySubmitted / ValueError."""
+    questions). Raises AlreadySubmitted / SurveyClosed / ValueError."""
     today = today or timezone.localdate()
     result = bat.score_answers(answers)          # ValueError if the answers are invalid
+    window = current_window(employee, today)
+    if window is None:
+        raise SurveyClosed()
     scores = {name: Decimal(str(value)) for name, value in result['scores'].items()}
 
     with transaction.atomic():
         # Lock the employee row so a double click cannot save two surveys.
         Employee.objects.select_for_update().get(pk=employee.pk)
-        if submission_in_period(employee, today) is not None:
+        if submission_in_period(employee, today, window) is not None:
             raise AlreadySubmitted()
         row = BurnoutSurvey.objects.create(
             employee_id=employee.pk,
@@ -85,7 +119,7 @@ def submit(employee, answers, model_answers, today=None):
             overall_score=scores['total'],
             **model_answers,
         )
-    return _status(row, today)
+    return _status(row, window)
 
 
 def bat_history(employee, limit=12):

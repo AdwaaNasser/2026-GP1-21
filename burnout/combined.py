@@ -35,13 +35,13 @@ MONITOR_MODEL = {
     'label': 'Monitor',
     'message': (
         'The model sees a high risk in the work data, but the employee\'s own answers do not. '
-        'It may be an early sign or a coincidence. Look again next month.'
+        'It may be an early sign or a coincidence. Look again after the next survey.'
     ),
 }
 MONITOR_MIDDLE = {
     'key': 'monitor',
     'label': 'Monitor',
-    'message': 'At least one result is in the middle range. Look again next month.',
+    'message': 'At least one result is in the middle range. Look again after the next survey.',
 }
 NO_CONCERN = {
     'key': 'no_concern',

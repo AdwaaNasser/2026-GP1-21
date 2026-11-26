@@ -3,8 +3,21 @@ from django.db import models
 
 
 class Organization(models.Model):
+    # How often the burnout survey opens. HR chooses it. With 'manual' the
+    # survey opens only when HR sends it (survey_opened_on = the day it was sent).
+    SURVEY_FREQUENCIES = [
+        ('monthly', 'Every month'),
+        ('quarterly', 'Every 3 months'),
+        ('semiannual', 'Every 6 months'),
+        ('manual', 'Manual (HR sends it)'),
+    ]
+
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=255)
+    survey_frequency = models.CharField(
+        max_length=20, choices=SURVEY_FREQUENCIES, default='quarterly',
+    )
+    survey_opened_on = models.DateField(blank=True, null=True)
 
     class Meta:
         db_table = 'organization'

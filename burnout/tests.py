@@ -240,13 +240,59 @@ class PeriodTests(SimpleTestCase):
         self.assertEqual(surveys.next_period_start(date(2026, 11, 12), 3), date(2027, 1, 1))
         self.assertEqual(surveys.period_start(date(2026, 2, 20), 3), date(2026, 1, 1))
 
-    def test_default_is_monthly(self):
-        self.assertEqual(surveys.PERIOD_MONTHS, 1)
+    def test_default_is_every_three_months(self):
+        self.assertEqual(surveys.DEFAULT_FREQUENCY, 'quarterly')
+        self.assertEqual(surveys.FREQUENCY_MONTHS, {'monthly': 1, 'quarterly': 3, 'semiannual': 6})
+
+    def test_half_year_period(self):
+        self.assertEqual(surveys.period_start(date(2026, 11, 12), 6), date(2026, 7, 1))
+        self.assertEqual(surveys.next_period_start(date(2026, 11, 12), 6), date(2027, 1, 1))
+
+
+def employee_in(frequency, opened_on=None):
+    org = SimpleNamespace(survey_frequency=frequency, survey_opened_on=opened_on)
+    return SimpleNamespace(pk=7, user=SimpleNamespace(org=org))
+
+
+class CurrentWindowTests(SimpleTestCase):
+    today = date(2026, 11, 12)
+
+    def test_each_frequency(self):
+        cases = {
+            'monthly': (date(2026, 11, 1), date(2026, 12, 1)),
+            'quarterly': (date(2026, 10, 1), date(2027, 1, 1)),
+            'semiannual': (date(2026, 7, 1), date(2027, 1, 1)),
+        }
+        for frequency, (since, nxt) in cases.items():
+            window = surveys.current_window(employee_in(frequency), self.today)
+            self.assertEqual(window, {'since': since, 'next': nxt}, frequency)
+
+    def test_manual_is_closed_until_hr_sends(self):
+        self.assertIsNone(surveys.current_window(employee_in('manual'), self.today))
+        window = surveys.current_window(employee_in('manual', date(2026, 11, 10)), self.today)
+        self.assertEqual(window, {'since': date(2026, 11, 10), 'next': None})
+
+    def test_manual_status_closed_then_available(self):
+        self.assertEqual(
+            surveys.status_for(employee_in('manual'), today=self.today),
+            {'status': 'closed', 'submitted_on': None, 'next_available': None},
+        )
+        with patch.object(surveys, 'submission_in_period', return_value=None):
+            self.assertEqual(
+                surveys.status_for(employee_in('manual', date(2026, 11, 10)), today=self.today)['status'],
+                'available',
+            )
+
+    def test_manual_submit_refused_while_closed(self):
+        with patch.object(surveys, 'BurnoutSurvey') as table:
+            with self.assertRaises(surveys.SurveyClosed):
+                surveys.submit(employee_in('manual'), [3] * 12, {'stress_score': 5}, today=self.today)
+        table.objects.create.assert_not_called()
 
 
 class SurveySaveTests(SimpleTestCase):
     """No database: the table access is replaced by mocks."""
-    employee = SimpleNamespace(pk=7)
+    employee = employee_in('monthly')
     answers = [5, 5, 5, 1, 1, 1, 3, 3, 3, 2, 2, 2]
     model_answers = {'stress_score': 8, 'ai_tools_daily': True}
 
@@ -688,3 +734,50 @@ class AssessmentTests(SimpleTestCase):
             result = services.assessment(SimpleNamespace(pk=1), {'level': None})
         self.assertEqual(result['bat']['zone'], 'red')
         self.assertIsNone(result['combined'])
+
+
+class SurveySettingsViewTests(SimpleTestCase):
+    def hr(self, frequency='quarterly', opened_on=None):
+        org = SimpleNamespace(survey_frequency=frequency, survey_opened_on=opened_on, save=MagicMock())
+        return SimpleNamespace(role='HR', is_authenticated=True, pk=1, org=org)
+
+    def call(self, view, method, user, data=None):
+        factory = APIRequestFactory()
+        request = factory.get('/x/') if method == 'get' else getattr(factory, method)('/x/', data, format='json')
+        force_authenticate(request, user=user)
+        return view.as_view()(request)
+
+    def test_only_hr(self):
+        from burnout.views import SurveySettingsView
+        for role in ('Manager', 'Employee'):
+            user = SimpleNamespace(role=role, is_authenticated=True, pk=2)
+            with patch('goals.permissions.is_hr', return_value=False):
+                self.assertEqual(self.call(SurveySettingsView, 'get', user).status_code, 403)
+
+    def test_hr_reads_and_changes_the_frequency(self):
+        from burnout.views import SurveySettingsView
+        user = self.hr()
+        with patch('goals.permissions.is_hr', return_value=True):
+            self.assertEqual(self.call(SurveySettingsView, 'get', user).data['frequency'], 'quarterly')
+            response = self.call(SurveySettingsView, 'put', user, {'frequency': 'semiannual'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(user.org.survey_frequency, 'semiannual')
+        user.org.save.assert_called_once()
+
+    def test_unknown_frequency_is_refused(self):
+        from burnout.views import SurveySettingsView
+        user = self.hr()
+        with patch('goals.permissions.is_hr', return_value=True):
+            response = self.call(SurveySettingsView, 'put', user, {'frequency': 'weekly'})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(user.org.survey_frequency, 'quarterly')
+
+    def test_send_works_only_in_manual_mode(self):
+        from burnout.views import SurveySendView
+        with patch('goals.permissions.is_hr', return_value=True):
+            auto = self.hr('monthly')
+            self.assertEqual(self.call(SurveySendView, 'post', auto).status_code, 400)
+            manual = self.hr('manual')
+            response = self.call(SurveySendView, 'post', manual)
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(manual.org.survey_opened_on)

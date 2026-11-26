@@ -32,6 +32,24 @@ function Submitted({ status, t }) {
   );
 }
 
+// Manual mode: HR has not sent a survey yet.
+function Closed({ t }) {
+  const arabic = t.dir === 'rtl';
+  const title = t.closedTitle || (arabic ? 'لا يوجد استبيان مفتوح حاليًا' : 'No survey is open right now');
+  const text = t.closedText || (arabic
+    ? 'سيرسل قسم الموارد البشرية الاستبيان القادم، وتستطيع الإجابة عليه هنا عند فتحه.'
+    : 'HR will send the next survey. You will be able to answer it here once it is open.');
+  return (
+    <section className="ws-card bat-done">
+      <span className="bat-done-icon"><Icon name="clock" size={26} /></span>
+      <div>
+        <h3>{title}</h3>
+        <p>{text}</p>
+      </div>
+    </section>
+  );
+}
+
 // One extra question (the questions come from the backend: GET /api/burnout/bat/questions/).
 // Whole numbers use small squares (a number with + and - buttons when there are more
 // than MAX_SQUARES numbers, e.g. vacation days 0-30), hours of sleep a number box,
@@ -197,6 +215,8 @@ function Survey() {
     );
   }
 
+  if (status.status === 'closed') return <div className={`bat-form bat-${t.dir}`} dir={t.dir} lang={language}><Closed t={t} /></div>;
+
   if (status.status === 'submitted') return <div className={`bat-form bat-${t.dir}`} dir={t.dir} lang={language}><Submitted status={status} t={t} /></div>;
 
   return (
@@ -302,50 +322,6 @@ export function EmployeeWellbeing() {
 
 const LEVELS = ['Low', 'Moderate', 'High', 'Severe'];
 
-// The BAT result is a colour zone in the backend; the manager sees the level in words.
-const BAT_LEVEL = { green: 'Low', orange: 'Moderate', red: 'High' };
-
-// Explains the words and colours of the list. Closed until the manager opens it.
-function ReadingGuide() {
-  return (
-    <details className="bt-guide">
-      <summary>How to read this</summary>
-      <div className="bt-guide-body">
-        <div>
-          <h4>Burnout status</h4>
-          <p>Puts the two results below together, so you see one answer per person.</p>
-          <ul>
-            <li><span className="bt-overall-chip bt-overall-strong_signal">Strong signal</span> The survey and the model both show a high risk. Follow up soon.</li>
-            <li><span className="bt-overall-chip bt-overall-check_in">Check in</span> The employee says they feel burned out, but the model does not. Trust their answers and talk to them.</li>
-            <li><span className="bt-overall-chip bt-overall-monitor">Monitor</span> A middle result, or the two results differ. Look again next month.</li>
-            <li><span className="bt-overall-chip bt-overall-no_concern">No concern</span> Both results are low.</li>
-          </ul>
-        </div>
-        <div>
-          <h4>Model</h4>
-          <p>The predicted burnout risk, from 0 to 10, based on work data and the monthly survey.</p>
-          <ul>
-            <li><span className="bt-level bt-level-Low">Low</span> below 3.5</li>
-            <li><span className="bt-level bt-level-Moderate">Moderate</span> 3.5 to 5.4</li>
-            <li><span className="bt-level bt-level-High">High</span> 5.5 to 6.9</li>
-            <li><span className="bt-level bt-level-Severe">Severe</span> 7 and above</li>
-          </ul>
-        </div>
-        <div>
-          <h4>BAT</h4>
-          <p>The employee&rsquo;s own answers to the burnout questionnaire (BAT-12).</p>
-          <ul>
-            <li><span className="bt-bat bt-bat-green">Low</span> a normal level</li>
-            <li><span className="bt-bat bt-bat-orange">Moderate</span> a possible risk</li>
-            <li><span className="bt-bat bt-bat-red">High</span> a high risk</li>
-          </ul>
-        </div>
-        <p className="bt-guide-note">These are estimates to help you notice who may need support. They are not a medical diagnosis.</p>
-      </div>
-    </details>
-  );
-}
-
 // A short suggestion shown under a factor that raises the risk.
 // It is matched by words in the factor name (the first match wins, so the more
 // specific rules come first), so it keeps working when the model's feature
@@ -404,7 +380,7 @@ function History({ employeeId }) {
 
   if (error) return <p className="bt-muted bt-history-note">{error}</p>;
   if (!data) return <p className="bt-muted bt-history-note">Loading…</p>;
-  if (data.predictions.length === 0) return <p className="bt-muted bt-history-note">No saved predictions yet. One is saved each time the employee sends the monthly survey.</p>;
+  if (data.predictions.length === 0) return <p className="bt-muted bt-history-note">No saved predictions yet. One is saved each time the employee sends the survey.</p>;
 
   const batByDate = Object.fromEntries(data.bat.map((row) => [row.date, row]));
   return (
@@ -427,7 +403,7 @@ function History({ employeeId }) {
                   </span>
                 ))}
               </td>
-              <td>{bat ? <span className={`bt-bat bt-bat-${bat.zone}`}>{BAT_LEVEL[bat.zone] || bat.zone}</span> : <span className="bt-muted">-</span>}</td>
+              <td>{bat ? <span className={`bt-bat bt-bat-${bat.zone}`}>{bat.zone}</span> : <span className="bt-muted">-</span>}</td>
             </tr>
           );
         })}
@@ -463,7 +439,7 @@ function MemberRow({ member }) {
         {ok && (
           <span className="bt-overall-bat">
             Model <strong>{member.level} {Number(member.score).toFixed(1)}</strong>
-            {member.bat && <> · BAT <span className={`bt-bat bt-bat-${member.bat.zone}`}>{BAT_LEVEL[member.bat.zone] || member.bat.zone}</span></>}
+            {member.bat && <> · BAT <span className={`bt-bat bt-bat-${member.bat.zone}`}>{member.bat.zone}</span></>}
           </span>
         )}
       </div>
@@ -545,7 +521,6 @@ function TeamBurnout() {
               <h3>Your team</h3>
               <p>Highest predicted risk first. The status compares the model prediction with the employee's own BAT survey answers.</p>
             </div>
-            <ReadingGuide />
             <div className="bt-search-row">
               <input
                 className="bt-search"
@@ -933,6 +908,76 @@ function DepartmentTable({ data }) {
   );
 }
 
+// HR: how often the survey opens for the whole organization.
+function SurveySchedule() {
+  const { banner, success, failure, clear } = useBanner();
+  const [settings, setSettings] = useState(null);
+  const [choice, setChoice] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    getJson('/api/burnout/survey-settings/')
+      .then((data) => { setSettings(data); setChoice(data.frequency); })
+      .catch(failure);
+  }, [failure]);
+
+  async function save() {
+    setBusy(true);
+    try {
+      const data = await sendJson('/api/burnout/survey-settings/', 'PUT', { frequency: choice });
+      setSettings(data);
+      success('Survey schedule saved.');
+    } catch (error) {
+      failure(error);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendNow() {
+    setBusy(true);
+    try {
+      setSettings(await sendJson('/api/burnout/survey-settings/send/', 'POST', {}));
+      success('The survey is now open for all employees.');
+    } catch (error) {
+      failure(error);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!settings) return <Banner {...banner} onClose={clear} />;
+  const manual = settings.frequency === 'manual';
+  return (
+    <section className="ws-card bc-card">
+      <Banner {...banner} onClose={clear} />
+      <div className="ws-card-head">
+        <h3>Survey schedule</h3>
+        <p>How often employees are asked to answer the burnout survey.</p>
+      </div>
+      <div className="bc-body">
+        <label className="ws-hint" htmlFor="survey-frequency">Send the survey</label>
+        <div className="bc-toolbar">
+          <select id="survey-frequency" className="ws-input" value={choice} onChange={(event) => setChoice(event.target.value)}>
+            {settings.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+          <button type="button" className="ws-btn ws-btn-sm ws-btn-primary" disabled={busy || choice === settings.frequency} onClick={save}>Save</button>
+          {manual && (
+            <button type="button" className="ws-btn ws-btn-sm ws-btn-secondary" disabled={busy} onClick={sendNow}>Send survey now</button>
+          )}
+        </div>
+        {manual && (
+          <p className="bat-note">{settings.last_sent_on ? `Last sent on ${formatDate(settings.last_sent_on)}.` : 'No survey has been sent yet.'}</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// The department comparison is a dashboard: it is hidden in Release 1 and comes
+// back in Release 2. Set this to true to show it again.
+const SHOW_DEPARTMENT_COMPARISON = false;
+
 function DepartmentBurnout() {
   const { banner, failure, clear } = useBanner();
   const [data, setData] = useState(null);
@@ -940,6 +985,10 @@ function DepartmentBurnout() {
   const tooltip = useTooltip();
 
   useEffect(() => {
+    if (!SHOW_DEPARTMENT_COMPARISON) {
+      setData({ organization: null, departments: [] });
+      return;
+    }
     getJson('/api/burnout/departments/')
       .then(setData)
       .catch((error) => {
@@ -952,7 +1001,8 @@ function DepartmentBurnout() {
   return (
     <div className="bt-page bc-page">
       <Banner {...banner} onClose={clear} />
-      {data === null ? (
+      <SurveySchedule />
+      {!SHOW_DEPARTMENT_COMPARISON ? null : data === null ? (
         <TableSkeleton />
       ) : data.departments.length === 0 ? (
         <div className="ws-card">
@@ -1020,7 +1070,7 @@ function DepartmentBurnout() {
 
 export function HRBurnout() {
   return (
-    <Shell role="HR" title="Burnout risk" subtitle="Predicted burnout risk compared between departments">
+    <Shell role="HR" title="Burnout survey" subtitle="Choose how often employees answer the burnout survey">
       <DepartmentBurnout />
     </Shell>
   );

@@ -1,5 +1,6 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
+from .skills import MySkillsView, SkillCatalogView, TeamMemberSkillsView
 from .views import (
     OrganizationSetupView,
     LoginView,
@@ -15,6 +16,9 @@ from .views import (
 )
 
 urlpatterns = [
+    path('skills/catalog/', SkillCatalogView.as_view(), name='skill-catalog'),
+    path('skills/mine/', MySkillsView.as_view(), name='my-skills'),
+    path('skills/employee/<int:employee_id>/', TeamMemberSkillsView.as_view(), name='team-member-skills'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token-refresh'),
     path('setup/', OrganizationSetupView.as_view(), name='organization-setup'),
     path('login/', LoginView.as_view(), name='login'),

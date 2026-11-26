@@ -1,9 +1,10 @@
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.models import Employee
+from accounts.models import Employee, Organization
 from goals.permissions import IsHR, IsManager
 from workspace.permissions import is_employee, is_manager
 
@@ -84,9 +85,11 @@ def employee_of(user):
 
 
 class BatSurveyView(APIView):
-    """The monthly BAT survey of the signed-in employee.
+    """The BAT survey of the signed-in employee. HR chooses how often it opens
+    (every month, 3 months, 6 months, or only when HR sends it).
 
-    GET  -> {"status": "available" | "submitted", "submitted_on", "next_available"}
+    GET  -> {"status": "available" | "submitted" | "closed", "submitted_on", "next_available"}
+            ("closed": manual mode and HR has not sent the survey yet)
     POST -> body {"answers": [12 numbers from 1 to 5],
                   "model_answers": {the 10 questions of model_inputs.QUESTIONS}};
             all are required. Saves one row in burnoutsurvey and answers with the
@@ -117,6 +120,11 @@ class BatSurveyView(APIView):
             return Response({'model_answers': model_problems}, status=status.HTTP_400_BAD_REQUEST)
         try:
             result = surveys.submit(employee, answers, model_answers)
+        except surveys.SurveyClosed:
+            return Response(
+                {'detail': 'No survey is open right now. HR has not sent one yet.'},
+                status=status.HTTP_409_CONFLICT,
+            )
         except surveys.AlreadySubmitted:
             return Response(
                 {'detail': 'You already submitted the survey for this period.'},
@@ -173,3 +181,55 @@ class DepartmentBurnoutView(APIView):
 
     def get(self, request):
         return Response(services.departments_for_org(request.user.org_id))
+
+
+def survey_settings(org):
+    return {
+        'frequency': org.survey_frequency,
+        'options': [{'value': value, 'label': label} for value, label in Organization.SURVEY_FREQUENCIES],
+        'last_sent_on': org.survey_opened_on.isoformat() if org.survey_opened_on else None,
+    }
+
+
+class SurveySettingsView(APIView):
+    """GET/PUT /api/burnout/survey-settings/  (HR only)
+
+    How often the survey opens for the whole organization. PUT body:
+    {"frequency": "monthly" | "quarterly" | "semiannual" | "manual"}."""
+
+    permission_classes = [IsHR]
+
+    def get(self, request):
+        return Response(survey_settings(request.user.org))
+
+    def put(self, request):
+        frequency = request.data.get('frequency') if hasattr(request.data, 'get') else None
+        if frequency not in dict(Organization.SURVEY_FREQUENCIES):
+            return Response(
+                {'frequency': 'Choose monthly, quarterly, semiannual or manual.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        org = request.user.org
+        org.survey_frequency = frequency
+        org.save(update_fields=['survey_frequency'])
+        return Response(survey_settings(org))
+
+
+class SurveySendView(APIView):
+    """POST /api/burnout/survey-settings/send/  (HR only)
+
+    Manual mode: opens the survey now for every employee of the organization.
+    Employees who already answered today are not asked again today."""
+
+    permission_classes = [IsHR]
+
+    def post(self, request):
+        org = request.user.org
+        if org.survey_frequency != 'manual':
+            return Response(
+                {'detail': 'The survey opens on its own schedule. Choose "Manual" to send it yourself.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        org.survey_opened_on = timezone.localdate()
+        org.save(update_fields=['survey_opened_on'])
+        return Response(survey_settings(org))

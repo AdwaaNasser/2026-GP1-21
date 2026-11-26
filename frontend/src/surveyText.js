@@ -54,6 +54,8 @@ export const TEXT = {
     doneTitle: 'Survey submitted',
     doneThanks: (date) => `Thank you. You answered on ${date}.`,
     doneNext: (date) => `The next survey opens on ${date}.`,
+    closedTitle: 'No survey is open right now',
+    closedText: 'HR will send the next survey. You will be able to answer it here once it is open.',
     // The labels of the model questions come from the backend; these replace them
     // when the language is not English (the key is the one used by the backend).
     extra: {},
@@ -99,6 +101,8 @@ export const TEXT = {
     doneTitle: 'تم إرسال الاستبيان',
     doneThanks: (date) => `شكرًا لك. أجبت بتاريخ ${date}.`,
     doneNext: (date) => `يفتح الاستبيان التالي بتاريخ ${date}.`,
+    closedTitle: 'لا يوجد استبيان مفتوح حاليًا',
+    closedText: 'سيرسل قسم الموارد البشرية الاستبيان القادم، وتستطيع الإجابة عليه هنا عند فتحه.',
     extra: {
       stress_score: 'إلى أي مدى شعرت بالتوتر في العمل خلال هذا الشهر؟ (1 = لا أشعر بالتوتر إطلاقًا، 10 = أشعر بتوتر شديد للغاية)',
       work_life_balance_score: 'إلى أي مدى يؤثر عملك سلبًا في حياتك الشخصية؟ (1 = لا يؤثر إطلاقًا، 10 = يؤثر بدرجة كبيرة جدًا)',
