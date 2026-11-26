@@ -94,9 +94,10 @@ function Brand({ small = false }) {
 // ==================== Header ====================
 
 const NAV = [
-  ['#burnout', 'Burnout insights'],
-  ['#assign', 'Smart assignment'],
-  ['#roles', 'For your team'],
+  ['#features', 'Features'],
+  ['#burnout', 'Burnout assessment'],
+  ['#assign', 'Task recommendations'],
+  ['#roles', 'User roles'],
   ['#faq', 'FAQ'],
 ];
 
@@ -152,8 +153,8 @@ function LxHeader() {
 
 // ==================== Hero ====================
 
-const HEADLINE = ['See', 'your', 'workforce', 'clearly.'];
-const HEADLINE_ACCENT = ['Decide', 'with', 'confidence.'];
+const HEADLINE = ['Human', 'Resource', 'Management'];
+const HEADLINE_ACCENT = ['and', 'Decision', 'Support'];
 
 // Small line icons, drawn like the ones in the Bayyinah sidebar.
 const ICONS = {
@@ -219,7 +220,7 @@ function HeroApp() {
           <div className="lxm-content">
             <div className="lxm-hero">
               <div className="lxm-hero-copy">
-                <b>Good evening, Khalid.</b>
+                <b>Welcome, Khalid.</b>
                 <p>18 open tasks across your team.</p>
                 <div className="lxm-actions">
                   <span className="lxm-btn-orange"><Icon name="team" />View my team</span>
@@ -250,7 +251,7 @@ function HeroApp() {
 
       <div className="lx-float lx-float-alert" aria-hidden="true">
         <span className="lx-pulse" />
-        <span><b>2 high-priority tasks</b><small>Review upcoming deadlines</small></span>
+        <span><b>2 high-priority tasks</b><small>Review task priorities</small></span>
       </div>
       <div className="lx-float lx-float-suggest" aria-hidden="true">
         <span className="lx-float-icon">✦</span>
@@ -277,19 +278,18 @@ function Hero() {
 
       <div className="lx-wrap lx-hero-copy">
         <span className="lx-badge lx-fade" style={{ animationDelay: '0ms' }}>
-          <span className="lx-badge-dot" /> Workforce insights + smart task recommendations
+          <span className="lx-badge-dot" /> AI-assisted HR platform for small and medium-sized businesses
         </span>
         <h1 id="lx-hero-title" className="lx-h1">
           {HEADLINE.map((text) => <span key={text} className="lx-word" style={{ animationDelay: `${120 + (word++) * 70}ms` }}>{text} </span>)}
           {HEADLINE_ACCENT.map((text) => <span key={text} className="lx-word lx-accent" style={{ animationDelay: `${120 + (word++) * 70}ms` }}>{text} </span>)}
         </h1>
         <p className="lx-hero-lead lx-fade" style={{ animationDelay: '750ms' }}>
-          Bayyinah brings employee records, projects, tasks and goals into one workspace.
-          It supports task-assignment decisions and helps HR review burnout-related insights.
+          Bayyinah brings employee records, projects, tasks and performance goals into one platform for small and medium-sized enterprises (SMEs), with task recommendations and burnout risk prediction to support managers.
         </p>
         <div className="lx-actions lx-fade" style={{ animationDelay: '900ms' }}>
-          <a className="lx-btn lx-btn-primary" href="/setup">Set up your organization <span aria-hidden="true">→</span></a>
-          <a className="lx-btn lx-btn-ghost" href="/login">I already have an account</a>
+          <a className="lx-btn lx-btn-primary" href="/setup">Set up your organisation <span aria-hidden="true">→</span></a>
+          <a className="lx-btn lx-btn-ghost" href="/login">Log in</a>
         </div>
       </div>
 
@@ -303,43 +303,27 @@ function Hero() {
 // ==================== Numbers ====================
 
 const FACTS = [
-  [67, 'of full-time employees feel burned out at work at least sometimes.'],
-  [48, 'of employees in the Middle East and North Africa felt a lot of stress the day before.'],
-  [14, 'of employees in the Middle East and North Africa feel engaged at work.'],
+  ['Employee management', 'Manage employee records, skills and organisational information.'],
+  ['Projects & tasks', 'Manage projects, assign tasks and monitor work progress.'],
+  ['Performance management', 'Set performance goals and track employee progress.'],
 ];
-
-function Fact({ value, text, delay }) {
-  const [ref, inView] = useInView(0.4);
-  const shown = useCountUp(value, inView);
-  return (
-    <Reveal className="lx-fact" delay={delay}>
-      <strong ref={ref}>
-        <span className="lx-sr">{value}%</span>
-        <span aria-hidden="true">{shown}<small>%</small></span>
-      </strong>
-      <p>{text}</p>
-    </Reveal>
-  );
-}
 
 function Numbers() {
   return (
-    <section className="lx-section lx-numbers" aria-labelledby="lx-numbers-title">
+    <section className="lx-section lx-numbers" id="features" aria-labelledby="lx-numbers-title">
       <div className="lx-wrap">
         <Reveal className="lx-head lx-head-center">
-          <span className="lx-eyebrow">Why it matters</span>
-          <h2 id="lx-numbers-title" className="lx-h2">Workplace pressure is real. <span className="lx-accent">Better decisions need context.</span></h2>
+          <span className="lx-eyebrow">Key features</span>
+          <h2 id="lx-numbers-title" className="lx-h2">Core <span className="lx-accent">Management Features</span></h2>
         </Reveal>
         <div className="lx-facts">
-          {FACTS.map(([value, text], index) => <Fact key={text} value={value} text={text} delay={index * 120} />)}
+          {FACTS.map(([title, text], index) => (
+            <Reveal key={title} className="lx-fact" delay={index * 120}>
+              <strong style={{fontSize: 'clamp(1.5rem, 3vw, 2.4rem)'}}>{title}</strong>
+              <p>{text}</p>
+            </Reveal>
+          ))}
         </div>
-        <p className="lx-source">
-          Sources: Gallup,{' '}
-          <a href="https://www.gallup.com/workplace/237059/employee-burnout-part-main-causes.aspx" target="_blank" rel="noreferrer">Employee Burnout, Part 1</a>
-          {' '}(2018, nearly 7,500 full-time employees) and{' '}
-          <a href="https://www.gallup.com/file/workplace/697829/SOGW_Region_2025_MiddleEastAndNorthAfrica.pdf" target="_blank" rel="noreferrer">State of the Global Workplace</a>
-          {' '}(2025, Middle East and North Africa).
-        </p>
       </div>
     </section>
   );
@@ -348,10 +332,9 @@ function Numbers() {
 // ==================== Feature: burnout ====================
 
 const FACTORS = [
-  ['Overdue tasks', 90, '+31', 'up'],
-  ['Overtime hours', 66, '+22', 'up'],
-  ['Meeting load', 42, '+14', 'up'],
-  ['Days off taken', 24, '−8', 'down'],
+  ['Stress score', 90, '+1.2', 'up'],
+  ['Planned weekly hours', 45, '+0.6', 'up'],
+  ['Sleep hours', 30, '−0.4', 'down'],
 ];
 
 function BurnoutCard() {
@@ -363,24 +346,24 @@ function BurnoutCard() {
         <span className="lxm-av lxm-av-big" aria-hidden="true">LA</span>
         <span className="lxm-profile-name"><b>Lama Alanazi</b><small>Backend Developer · IT</small></span>
         <div className="lxm-tiles">
-          <div className="lxm-tile-risk"><small>Burnout risk</small><b>{score}%</b></div>
-          <div><small>Open tasks</small><b>5</b></div>
-          <div><small>Overdue</small><b>3</b></div>
+          <div className="lxm-tile-risk"><small>Predicted score</small><b>{(score / 10).toFixed(1)}/10</b></div>
+          <div><small>BAT zone</small><b>Red</b></div>
+          <div><small>Combined status</small><b>Strong signal</b></div>
         </div>
       </div>
 
       <div className="lxm-card">
         <div className="lxm-card-head"><b>Illustrative risk estimate</b><Example /></div>
         <div className="lxm-risk-body">
-          <div className="lxm-ring" role="img" aria-label="Example burnout risk: 82 percent, high">
+          <div className="lxm-ring" role="img" aria-label="Example predicted burnout score: 8.2 out of 10, severe">
             <svg viewBox="0 0 100 100" aria-hidden="true">
               <circle className="lxm-ring-track" cx="50" cy="50" r="40" pathLength="100" />
               <circle className="lxm-ring-value" cx="50" cy="50" r="40" pathLength="100" />
             </svg>
-            <span aria-hidden="true"><b>{score}%</b><small>High risk</small></span>
+            <span aria-hidden="true"><b>{(score / 10).toFixed(1)}</b><small>Severe · /10</small></span>
           </div>
           <div className="lxm-factors">
-            <p>Sample explanatory factors</p>
+            <p>Largest model contributions (SHAP)</p>
             {FACTORS.map(([name, width, value, dir], index) => (
               <div className="lx-factor" key={name} style={{ '--d': `${400 + index * 140}ms` }}>
                 <span>{name}</span>
@@ -390,7 +373,7 @@ function BurnoutCard() {
             ))}
           </div>
         </div>
-        <p className="lxm-note">Illustrative values only; not a live prediction or clinical diagnosis.</p>
+        <p className="lxm-note">Example values only. Model contributions do not establish causation.</p>
       </div>
     </div>
   );
@@ -399,8 +382,8 @@ function BurnoutCard() {
 // ==================== Feature: smart assignment ====================
 
 const CANDIDATES = [
-  ['NA', 'Nasser Alanazi', 'QA Engineer', 92, 'Best match', ['Django · advanced', 'Python · advanced'], 'Estimated available: 12h'],
-  ['FA', 'Fahad Alharthi', 'Mobile Developer', 74, 'Good match', ['Python · intermediate'], 'Estimated available: 8h'],
+  ['NA', 'Nasser Alanazi', 'QA Engineer', 92, 'Top-ranked', ['Django · advanced', 'Python · advanced'], 'Estimated available: 12h'],
+  ['FA', 'Fahad Alharthi', 'Mobile Developer', 74, 'Next-ranked', ['Python · intermediate', 'Django · intermediate'], 'Estimated available: 8h'],
 ];
 
 function AssignCard() {
@@ -427,7 +410,7 @@ function AssignCard() {
                 <div className="lxm-skills">{skills.map((skill) => <span key={skill} className="lxm-skill">{skill}</span>)}</div>
                 <div className="lx-match">
                   <span className="lxm-track"><i className="lxm-fill-orange" style={{ '--w': `${match}%` }} /></span>
-                  <em>{match}%</em>
+                  <em>{match}/100</em>
                 </div>
                 <small className="lxm-free">{free}</small>
               </div>
@@ -439,7 +422,7 @@ function AssignCard() {
         <div className="lx-excluded lxm-excluded" style={{ '--d': '800ms' }}>
           <span className="lxm-av lxm-av-muted" aria-hidden="true">LA</span>
           <span><b>Lama Alanazi</b> not eligible</span>
-          <span className="lxm-pill lxm-pill-todo"><i />Unavailable in task period</span>
+          <span className="lxm-pill lxm-pill-todo"><i />No working days available</span>
         </div>
       </div>
     </div>
@@ -472,9 +455,9 @@ function Feature({ id, eyebrow, title, accent, lead, points, flip = false, child
 // ==================== Roles ====================
 
 const ROLES = [
-  ['HR', 'Support people with better information', 'Maintain employee records and review workforce and burnout-related information through dedicated HR views.', ['Employee records', 'Burnout management', 'Organization overview']],
-  ['Manager', 'Plan work with more context', 'Manage projects and tasks, follow goals, and review recommendations before assigning work.', ['Smart task assignment', 'Projects and tasks', 'Goals and KPIs']],
-  ['Employee', 'Stay connected to your work', 'View assigned tasks and goals, update task status, and follow your own progress.', ['My assigned tasks', 'Goals and progress', 'My work information']],
+  ['HR', 'Manage your organisation', 'Maintain employee records and manage access to the organisation.', ['Employee records', 'Organisation setup', 'Employee invitations']],
+  ['Manager', 'Manage your team', 'Plan work, follow team progress and review recommendations before making decisions.', ['Task recommendations', 'Projects and goals', 'Team burnout insights']],
+  ['Employee', 'Manage your work', 'Know what is assigned to you, follow your goals and update your progress.', ['Assigned tasks', 'Goals and progress', 'Monthly burnout survey']],
 ];
 
 function Roles() {
@@ -482,9 +465,9 @@ function Roles() {
     <section className="lx-section" id="roles" aria-labelledby="lx-roles-title">
       <div className="lx-wrap">
         <Reveal className="lx-head lx-head-center">
-          <span className="lx-eyebrow">For your team</span>
-          <h2 id="lx-roles-title" className="lx-h2">One workspace. <span className="lx-accent">Three views.</span></h2>
-          <p className="lx-lead">HR, managers and employees access different views based on their responsibilities.</p>
+          <span className="lx-eyebrow">User roles</span>
+          <h2 id="lx-roles-title" className="lx-h2">Platform Users <span className="lx-accent">and Access</span></h2>
+          <p className="lx-lead">Bayyinah provides role-based access for HR professionals, managers and employees according to their responsibilities.</p>
         </Reveal>
         <div className="lx-roles">
           {ROLES.map(([role, title, text, list], index) => (
@@ -504,9 +487,9 @@ function Roles() {
 // ==================== Steps ====================
 
 const STEPS = [
-  ['Set up', 'HR adds employees or imports them using a CSV file, then invites users to join.'],
-  ['Organize work', 'Managers manage projects, goals and tasks, and review employee suggestions before assignment.'],
-  ['Review insights', 'HR reviews burnout assessments and predictive risk insights as support for follow-up, not diagnosis.'],
+  ['Set up your organisation', 'Add employee records individually or import a CSV file, then invite employees to join.'],
+  ['Work management', 'Create projects and goals, assign tasks and follow employee progress.'],
+  ['Decision support', 'Managers review task recommendations and team burnout insights as part of their decisions.'],
 ];
 
 function Steps() {
@@ -516,7 +499,7 @@ function Steps() {
       <div className="lx-wrap">
         <Reveal className="lx-head lx-head-center">
           <span className="lx-eyebrow">How it works</span>
-          <h2 id="lx-how-title" className="lx-h2">Up and running in <span className="lx-accent">three steps.</span></h2>
+          <h2 id="lx-how-title" className="lx-h2">Getting Started <span className="lx-accent">with Bayyinah</span></h2>
         </Reveal>
         <ol ref={ref} className={`lx-steps${inView ? ' is-in' : ''}`}>
           {STEPS.map(([title, text], index) => (
@@ -535,10 +518,13 @@ function Steps() {
 // ==================== FAQ ====================
 
 const FAQ = [
-  ['How does Bayyinah support burnout management?', 'It combines BAT-based burnout assessment with a separate predictive risk estimate. These insights support HR review and are not medical diagnoses.'],
-  ['How are employees recommended for tasks?', 'Bayyinah considers required skills, relevant completed tasks and estimated availability during the selected dates. Availability is an estimate, not a guarantee that the task will fit.'],
-  ['Does Bayyinah assign tasks automatically?', 'No. It ranks suggested employees and provides reasons. The manager makes the final assignment decision.'],
-  ['Who can access information?', 'Access depends on role: HR handles organizational records and authorized HR insights, managers manage their teams, and employees access their own work.'],
+  ['What is Bayyinah?', 'Bayyinah is an AI-assisted HR platform that brings employee management, work management and managerial decision support together.'],
+  ['How are employees recommended for tasks?', 'Eligible team members are ranked using available information on skills, relevant experience and estimated availability. Recommendations do not guarantee that a new task fits the employee’s schedule.'],
+  ['How does burnout risk prediction work?', 'A monthly survey provides employee responses, which are used with work-related and employee data to estimate a burnout score. The manager reviews the estimate alongside the BAT-12 assessment.'],
+  ['Who is Bayyinah for?', 'Bayyinah is designed for small and medium-sized enterprises that need to organise employee information and work in one platform, with decision support for managers.'],
+  ['Can Bayyinah diagnose burnout?', 'No. Bayyinah uses a monthly BAT-12 assessment and a separate model estimate. Their categories are interpreted together to guide managerial follow-up, not medical diagnosis.'],
+  ['Does Bayyinah assign tasks automatically?', 'No. Bayyinah ranks eligible employees using relevant skills, experience and estimated availability, including task similarity when available. Managers review suggestions and make the final decision. Availability is an estimate, not a guarantee.'],
+  ['Who can access employee information and burnout results?', 'Access depends on role. HR manages employee records, managers access their own teams, and employees access their own work. Individual burnout results are available to the authorised manager, not employees or HR.'],
   ['How do employees join?', 'HR adds them one by one or imports a CSV file. Each person gets an email invitation and sets their own password.'],
 ];
 
@@ -548,8 +534,8 @@ function Faq() {
       <div className="lx-wrap lx-faq">
         <Reveal className="lx-head">
           <span className="lx-eyebrow">FAQ</span>
-          <h2 id="lx-faq-title" className="lx-h2">Questions, <span className="lx-accent">answered.</span></h2>
-          <p className="lx-lead">The short version of how Bayyinah works.</p>
+          <h2 id="lx-faq-title" className="lx-h2">Frequently Asked <span className="lx-accent">Questions</span></h2>
+          <p className="lx-lead">Find answers about using Bayyinah, its recommendations and access to employee information.</p>
         </Reveal>
         <Reveal className="lx-faq-list" delay={120}>
           {FAQ.map(([question, answer]) => (
@@ -572,8 +558,8 @@ function Cta() {
       <div className="lx-wrap">
         <Reveal className="lx-cta" onMouseMove={trackSpotlight}>
           <div className="lx-cta-glow" aria-hidden="true" />
-          <h2 id="lx-cta-title" className="lx-h2">Bring work together. <span className="lx-accent">Make informed decisions.</span></h2>
-          <p className="lx-lead">Connect your team, tasks and goals in one workspace.</p>
+          <h2 id="lx-cta-title" className="lx-h2">Get Started <span className="lx-accent">with Bayyinah</span></h2>
+          <p className="lx-lead">Register your organisation to access employee management and decision-support features.</p>
           <div className="lx-actions">
             <a className="lx-btn lx-btn-primary" href="/setup">Get started <span aria-hidden="true">→</span></a>
             <a className="lx-btn lx-btn-ghost" href="/login">Log in</a>
@@ -587,9 +573,9 @@ function Cta() {
 // ==================== Footer ====================
 
 const FOOTER_COLUMNS = [
-  ['Product', [['#burnout', 'Burnout insights'], ['#assign', 'Smart assignment'], ['#roles', 'For your team'], ['#how', 'How it works']]],
+  ['Product', [['#burnout', 'Burnout assessment'], ['#assign', 'Task recommendations'], ['#roles', 'User roles'], ['#how', 'How it works']]],
   ['Help', [['#faq', 'FAQ'], ['/forgot-password', 'Reset password']]],
-  ['Account', [['/login', 'Log in'], ['/setup', 'Set up your organization']]],
+  ['Account', [['/login', 'Log in'], ['/setup', 'Set up your organisation']]],
 ];
 
 function LxFooter() {
@@ -598,7 +584,7 @@ function LxFooter() {
       <div className="lx-wrap lx-footer-grid">
         <div className="lx-footer-brand">
           <Brand small />
-          <p>One workspace for employees, projects, tasks and goals, with insights that support better workforce decisions.</p>
+          <p>An AI-assisted human resource management platform for small and medium-sized enterprises.</p>
         </div>
         {FOOTER_COLUMNS.map(([title, links]) => (
           <nav key={title} className="lx-footer-col" aria-label={title}>
@@ -626,14 +612,14 @@ export function Home() {
         <Numbers />
         <Feature
           id="burnout"
-          eyebrow="Burnout insights"
-          title="See burnout from"
-          accent="more than one angle."
-          lead="Bayyinah brings together BAT-based burnout assessment and a separate predictive risk estimate for HR review. Neither should be treated as a medical diagnosis."
+          eyebrow="Burnout assessment and prediction"
+          title="Employee Burnout"
+          accent="Assessment and Prediction"
+          lead="Review employee-reported burnout assessments and machine learning estimates to support managerial follow-up."
           points={[
-            ['BAT-based assessment', 'A structured survey captures employee-reported burnout experiences.'],
-            ['Predictive risk insights', 'A separate model estimates risk as an additional signal, not a confirmed condition.'],
-            ['HR-led review', 'Sensitive burnout information stays separate from routine task assignment.'],
+            ['Burnout assessment', 'Employees complete a monthly survey that includes the 12-item Burnout Assessment Tool (BAT-12).'],
+            ['Burnout risk prediction', 'Estimate burnout scores using employee responses and work-related data.'],
+            ['Explainable predictions', 'Review the three main model contributions alongside the assessment and estimated score. Results support follow-up, not medical diagnosis.'],
           ]}
         >
           <BurnoutCard />
@@ -641,14 +627,14 @@ export function Home() {
         <Feature
           id="assign"
           flip
-          eyebrow="Smart task assignment"
-          title="Find a good match"
-          accent="for each task."
-          lead="Bayyinah suggests employees from the manager’s team using required skills, relevant completed tasks and estimated availability during the task dates."
+          eyebrow="Task recommendations"
+          title="Employee Recommendations"
+          accent="for Task Assignment"
+          lead="Review ranked suggestions based on skills, relevant experience and estimated availability. Managers make the final assignment decision."
           points={[
-            ['Checks required skills', 'Employees who do not meet mandatory skill requirements are excluded with a reason.'],
-            ['Uses estimated availability', 'Existing tasks, meetings and approved leave inform the ranking; time sufficiency for the new task is not guaranteed.'],
-            ['The manager decides', 'Review each suggestion and its reasons before assigning the task.'],
+            ['Skill matching', 'Identify employees who meet required skills and minimum skill levels and have working days available.'],
+            ['Estimated availability', 'Consider estimated availability during the task period based on planned tasks, meetings and approved leave.'],
+            ['Relevant experience', 'Consider completed work and semantic similarity when available.'],
           ]}
         >
           <AssignCard />
