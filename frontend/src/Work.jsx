@@ -635,6 +635,78 @@ export function ManagerTasks() {
 // Tasks the employee can still act on.
 const ACTIONABLE = ['todo', 'in_progress', 'changes_requested'];
 
+// Tasks the manager sent back, each with the start of the feedback, so the
+// employee sees what to fix without opening every task.
+const CHANGES_SHOWN = 3;
+
+function ChangesRequested({ tasks, onOpen }) {
+  const count = tasks.length;
+  return (
+    <section className="ws-changes" aria-labelledby="ws-changes-title">
+      <div className="ws-changes-head">
+        <span className="ws-changes-icon" aria-hidden="true"><Icon name="message" size={16} /></span>
+        <div>
+          <h3 id="ws-changes-title">
+            Your manager asked for changes on {count === 1 ? '1 task' : `${count} tasks`}
+          </h3>
+          <p>Read the feedback, update the work, then submit it again.</p>
+        </div>
+      </div>
+      <ul className="ws-changes-list">
+        {tasks.slice(0, CHANGES_SHOWN).map((task) => (
+          <li key={task.id}>
+            <button type="button" className="ws-changes-item" onClick={() => onOpen(task)}>
+              <span className="ws-changes-text">
+                <span className="ws-changes-task">{task.title}</span>
+                <span className="ws-changes-note">{task.feedback}</span>
+              </span>
+              <span className="ws-changes-open">
+                Read feedback <Icon name="chevron" size={14} />
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      {count > CHANGES_SHOWN && (
+        <p className="ws-changes-more">
+          {count - CHANGES_SHOWN} more {count - CHANGES_SHOWN === 1 ? 'task' : 'tasks'} with changes in the Open tab.
+        </p>
+      )}
+    </section>
+  );
+}
+
+// My projects, next to the task list: name, done tasks and progress.
+function MyProjects({ projects }) {
+  return (
+    <aside className="ws-tasks-aside" aria-labelledby="ws-my-projects">
+      <section className="ws-card ws-projects-card">
+        <div className="ws-projects-head">
+          <h3 id="ws-my-projects">My projects</h3>
+          <span className="ws-tab-count">{projects.length}</span>
+        </div>
+        <ul className="ws-projects-list">
+          {projects.map((project) => {
+            const { percent = 0, completed_tasks: done = 0, total_tasks: total = 0 } = project.progress || {};
+            return (
+              <li key={project.id}>
+                <a className="ws-project-link" href={`/employee/project?id=${project.id}`}>
+                  <span className="ws-project-top">
+                    <span className="ws-project-name" title={project.name}>{project.name}</span>
+                    <span className="ws-project-percent">{percent}%</span>
+                  </span>
+                  <ProgressBar progress={project.progress} showText={false} />
+                  <span className="ws-project-meta">{done} of {total} tasks done</span>
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+    </aside>
+  );
+}
+
 function TasksContent_EmployeeTasks() {
   const { banner, success, failure, clear } = useBanner();
   const [tasks, setTasks] = useState(null); // null while loading
@@ -681,100 +753,84 @@ function TasksContent_EmployeeTasks() {
     overdue: actionable.filter((task) => isOverdue(task, now)),
     review: mine.filter((task) => task.status === 'in_review'),
     completed: mine.filter((task) => task.status === 'completed'),
-    project: all.filter((task) => !task.is_mine),
   };
   const tabs = [
     ['open', 'Open'], ['today', 'Due today'], ['upcoming', 'Upcoming'], ['overdue', 'Overdue'],
-    ['review', 'Submitted'], ['completed', 'Completed'], ['project', 'Project tasks'],
+    ['review', 'Submitted'], ['completed', 'Completed'],
   ].map(([key, label]) => [key, label, lists[key].length]);
 
   const shown = sortTasks(filterTasks(lists[tab], filters), sort);
   const selected = all.find((task) => task.id === selectedId);
   const needChanges = mine.filter((task) => task.status === 'changes_requested');
 
-  function showChanges() {
+  function openChanges(task) {
     setTab('open');
-    setSelectedId(needChanges[0].id);
+    setSelectedId(task.id);
   }
 
   return (
     <>
       <Banner message={banner.message} isError={banner.isError} onClose={clear} />
 
-      {needChanges.length > 0 && (
-        <div className="ws-callout">
-          <Icon name="message" size={18} />
-          <div>
-            <strong>{needChanges.length === 1 ? '1 task needs changes' : `${needChanges.length} tasks need changes`}</strong>
-            <span>Your manager left feedback. Read it, update the work, then submit it again.</span>
-          </div>
-          <button className="ws-btn ws-btn-secondary ws-btn-sm" type="button" onClick={showChanges}>View feedback</button>
-        </div>
-      )}
+      {/* Wide screens: my projects stay beside the tasks. Narrower screens: they
+          sit under the changes card, one small card per project. */}
+      <div
+        className={`ws-tasks-layout${projects.length > 0 ? ' has-aside' : ''}`}
+        style={{ '--task-rows': needChanges.length > 0 ? 4 : 3 }} // rows the projects column spans
+      >
+        {needChanges.length > 0 && <ChangesRequested tasks={needChanges} onOpen={openChanges} />}
+        {projects.length > 0 && <MyProjects projects={projects} />}
 
-      <Tabs tabs={tabs} active={tab} onChange={setTab} />
+        <Tabs tabs={tabs} active={tab} onChange={setTab} />
 
-      <div className="ws-toolbar">
-        <label className="ws-search">
-          <Icon name="search" size={15} />
-          <input type="search" placeholder="Search tasks" value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} aria-label="Search tasks" />
-        </label>
-        <select className="ws-select ws-select-sm" value={filters.priority} onChange={(event) => setFilters({ ...filters, priority: event.target.value })} aria-label="Filter by priority">
-          <option value="all">All priorities</option>
-          {PRIORITIES.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
-        </select>
-        <span className="ws-spacer" />
-        <label className="ws-sort">
-          Sort by
-          <select className="ws-select ws-select-sm" value={sort} onChange={(event) => setSort(event.target.value)}>
-            <option value="due">Due date</option>
-            <option value="priority">Priority</option>
-            <option value="status">Status</option>
-            <option value="title">Title</option>
+        <div className="ws-toolbar">
+          <label className="ws-search">
+            <Icon name="search" size={15} />
+            <input type="search" placeholder="Search tasks" value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} aria-label="Search tasks" />
+          </label>
+          <select className="ws-select ws-select-sm" value={filters.priority} onChange={(event) => setFilters({ ...filters, priority: event.target.value })} aria-label="Filter by priority">
+            <option value="all">All priorities</option>
+            {PRIORITIES.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
           </select>
-        </label>
-      </div>
-
-      {tasks === null ? (
-        <TableSkeleton />
-      ) : shown.length === 0 ? (
-        <div className="ws-card">
-          <EmptyState icon={tab === 'completed' ? 'check' : 'tasks'} title={filters.search || filters.priority !== 'all' ? 'No tasks match these filters' : 'Nothing here'}>
-            {tab === 'open' ? 'You have no open tasks right now.' : 'Tasks will show up in this tab when they apply.'}
-          </EmptyState>
+          <span className="ws-spacer" />
+          <label className="ws-sort">
+            Sort by
+            <select className="ws-select ws-select-sm" value={sort} onChange={(event) => setSort(event.target.value)}>
+              <option value="due">Due date</option>
+              <option value="priority">Priority</option>
+              <option value="status">Status</option>
+              <option value="title">Title</option>
+            </select>
+          </label>
         </div>
-      ) : (
-        <TaskTable
-          tasks={shown}
-          showAssignee={tab === 'project'}
-          selectedId={selectedId}
-          onOpen={(task) => setSelectedId(task.id)}
-          renderAction={(task) => {
-            const action = EMPLOYEE_ACTIONS[task.status];
-            if (!task.is_mine || !task.next_status || !action) return null;
-            return (
-              <button className="ws-btn ws-btn-secondary ws-btn-sm" type="button" onClick={() => advanceFromRow(task)}>
-                <Icon name={action.icon} size={13} />
-                {action.label}
-              </button>
-            );
-          }}
-        />
-      )}
 
-      {projects.length > 0 && (
-        <section className="ws-card ws-side-card">
-          <div className="ws-card-head"><h3>Projects</h3></div>
-          <ul className="ws-member-list">
-            {projects.map((project) => (
-              <li key={project.id} className="ws-member-row">
-                <a className="ws-plain-link ws-task-title" href={`/employee/project?id=${project.id}`}>{project.name}</a>
-                <ProgressBar progress={project.progress} />
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+        {tasks === null ? (
+          <TableSkeleton />
+        ) : shown.length === 0 ? (
+          <div className="ws-card">
+            <EmptyState icon={tab === 'completed' ? 'check' : 'tasks'} title={filters.search || filters.priority !== 'all' ? 'No tasks match these filters' : 'Nothing here'}>
+              {tab === 'open' ? 'You have no open tasks right now.' : 'Tasks will show up in this tab when they apply.'}
+            </EmptyState>
+          </div>
+        ) : (
+          <TaskTable
+            tasks={shown}
+            showAssignee={false} // they are all the employee's own tasks
+            selectedId={selectedId}
+            onOpen={(task) => setSelectedId(task.id)}
+            renderAction={(task) => {
+              const action = EMPLOYEE_ACTIONS[task.status];
+              if (!task.is_mine || !task.next_status || !action) return null;
+              return (
+                <button className="ws-btn ws-btn-secondary ws-btn-sm" type="button" onClick={() => advanceFromRow(task)}>
+                  <Icon name={action.icon} size={13} />
+                  {action.label}
+                </button>
+              );
+            }}
+          />
+        )}
+      </div>
 
       {selected && (
         <Drawer title="Task details" onClose={() => setSelectedId(null)}>

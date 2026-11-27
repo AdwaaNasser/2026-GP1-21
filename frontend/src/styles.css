@@ -5398,3 +5398,123 @@ html:has(.lx) { scroll-behavior: smooth; }
 .sk-list-empty { padding: 10px 12px; color: var(--ws-muted); font-size: 13px; }
 .sk-save { justify-content: flex-end; margin-top: 16px; }
 .sk-unsaved { margin-right: auto; color: var(--ws-muted); font-size: 13px; }
+
+
+/* ---------- My tasks: tasks with my projects beside them ---------- */
+.ws-tasks-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px 20px; align-items: start; }
+.ws-tasks-layout > * { min-width: 0; order: 2; }
+.ws-tasks-layout > .ws-changes { order: 0; }
+.ws-tasks-layout > .ws-tasks-aside { order: 1; }
+
+.ws-projects-card { padding: 16px 18px; }
+.ws-projects-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.ws-projects-head h3 { margin: 0; font-size: 16px; }
+.ws-projects-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
+.ws-project-link {
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 7px; padding: 11px 12px; border: 1px solid var(--line);
+  border-radius: var(--r-md); color: var(--ink); text-decoration: none;
+  transition: background 140ms var(--ease), border-color 140ms var(--ease);
+}
+.ws-project-link:hover { border-color: var(--p-300); background: var(--bg); }
+.ws-project-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.ws-project-name { min-width: 0; overflow: hidden; font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.ws-project-percent { flex: none; color: var(--p-800); font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ws-project-link .ws-progress-bar { min-width: 0; height: 6px; }
+.ws-project-meta { color: var(--muted); font-size: 12.5px; }
+
+/* Laptop and wider: projects in a column on the right that stays in view. */
+@media (min-width: 1220px) {
+  .ws-tasks-layout.has-aside { grid-template-columns: minmax(0, 1fr) 248px; }
+  .ws-tasks-layout.has-aside > * { grid-column: 1; }
+  /* The projects column runs the full height of the tasks; the card fills the
+     screen height and stays in view while scrolling (its list scrolls if long). */
+  .ws-tasks-layout.has-aside > .ws-tasks-aside {
+    grid-column: 2; grid-row: 1 / span var(--task-rows, 3); align-self: stretch;
+    contain: size; /* its height follows the tasks and never stretches their rows */
+  }
+  .ws-tasks-layout.has-aside .ws-projects-card {
+    position: sticky; top: 20px; display: flex; height: calc(100vh - 40px); max-height: 100%; flex-direction: column;
+  }
+  .ws-tasks-layout.has-aside .ws-projects-list { min-height: 0; flex: 1; align-content: start; overflow-y: auto; }
+  .ws-tasks-layout.has-aside .ws-projects-list { grid-template-columns: minmax(0, 1fr); gap: 0; margin: 0 -8px; }
+  .ws-tasks-layout.has-aside .ws-project-link { padding: 12px 8px; border-width: 1px 0 0; border-radius: var(--r-sm); }
+  .ws-tasks-layout.has-aside .ws-projects-list li:first-child .ws-project-link { border-top-color: transparent; }
+  .ws-tasks-layout.has-aside .ws-project-link:hover { border-color: var(--line); }
+  /* A little tighter next to the projects, so task names keep one line. */
+  .ws-tasks-layout.has-aside .ws-tab { padding: 11px 10px; }
+  .ws-tasks-layout.has-aside .ws-table th,
+  .ws-tasks-layout.has-aside .ws-table td { padding-right: 12px; padding-left: 12px; }
+  .ws-tasks-layout.has-aside .ws-table th:first-child,
+  .ws-tasks-layout.has-aside .ws-table td:first-child { min-width: 230px; padding-left: 18px; }
+}
+
+/* Smaller laptops (and screens zoomed to 125%): a narrower projects column,
+   and long action buttons may take two lines so the table still fits. */
+@media (min-width: 1220px) and (max-width: 1439px) {
+  .ws-tasks-layout.has-aside { grid-template-columns: minmax(0, 1fr) 216px; gap: 16px; }
+  .ws-tasks-layout.has-aside .ws-table th,
+  .ws-tasks-layout.has-aside .ws-table td { padding-right: 10px; padding-left: 10px; }
+  .ws-tasks-layout.has-aside .ws-table th:first-child,
+  .ws-tasks-layout.has-aside .ws-table td:first-child { min-width: 170px; padding-left: 16px; }
+  .ws-tasks-layout.has-aside .ws-table td:last-child { width: 1%; }
+  .ws-tasks-layout.has-aside .ws-table td:last-child .ws-btn {
+    width: 128px; padding: 6px 10px; font-size: 13px; white-space: normal; text-align: left; line-height: 1.3;
+  }
+  /* Every tab stays visible: smaller tabs, and the last ones move to a second
+     line when they still do not fit (never cut off or scrolled away). */
+  .ws-tasks-layout.has-aside .ws-tabs { flex-wrap: wrap; gap: 0 2px; overflow: visible; }
+  .ws-tasks-layout.has-aside .ws-tab { padding: 10px 7px; font-size: 13px; }
+}
+@media (min-width: 1220px) and (max-width: 1365px) {
+  .ws-tasks-layout.has-aside { grid-template-columns: minmax(0, 1fr) 200px; }
+}
+
+/* Tasks the manager sent back */
+.ws-changes { padding: 16px 18px 8px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--white); box-shadow: var(--shadow-1); }
+.ws-changes-head { display: flex; align-items: flex-start; gap: 12px; }
+.ws-changes-icon {
+  display: inline-flex; flex: none; width: 32px; height: 32px; align-items: center; justify-content: center;
+  border-radius: 999px; background: var(--bad-bg); color: var(--bad);
+}
+.ws-changes-head h3 { margin: 0; color: var(--ink); font-size: 15px; font-weight: 700; }
+.ws-changes-head p { margin: 2px 0 0; color: var(--muted); font-size: 13.5px; }
+.ws-changes-list { margin: 10px -8px 0; padding: 0; list-style: none; }
+.ws-changes-item {
+  display: flex; width: 100%; align-items: center; gap: 16px; padding: 11px 8px;
+  border: 0; border-top: 1px solid var(--line); border-radius: var(--r-sm);
+  background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer;
+  transition: background 140ms var(--ease);
+}
+.ws-changes-item:hover { background: var(--bg); }
+.ws-changes-text { display: grid; flex: 1; min-width: 0; gap: 2px; }
+.ws-changes-task { font-size: 14px; font-weight: 600; }
+.ws-changes-note { overflow: hidden; color: var(--muted); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.ws-changes-open { display: inline-flex; flex: none; align-items: center; gap: 2px; color: var(--p-800); font-size: 13px; font-weight: 600; }
+.ws-changes-more { margin: 0; padding: 4px 0 8px; color: var(--muted); font-size: 13px; }
+
+/* Manager feedback inside the task panel, shown as a message */
+.ws-note { display: grid; gap: 8px; }
+.ws-note-head { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.ws-note-avatar {
+  display: inline-flex; width: 26px; height: 26px; align-items: center; justify-content: center;
+  border-radius: 999px; background: var(--p-50); color: var(--p-800);
+}
+.ws-note-from { color: var(--ink); font-weight: 700; }
+.ws-note-tag { color: var(--muted); }
+.ws-note-changes .ws-note-tag { color: var(--bad-ink); font-weight: 600; }
+.ws-note-text {
+  margin: 0 0 0 34px; padding: 11px 14px; border-radius: 4px 14px 14px 14px;
+  background: var(--bg); color: var(--ink); font-size: 14px; line-height: 1.55; white-space: pre-wrap;
+}
+.ws-note-changes .ws-note-text { background: color-mix(in srgb, var(--bad) 6%, #fff); }
+
+/* Tabs scroll sideways only (no vertical scroll arrows on Windows). */
+.ws-tabs { overflow-y: hidden; }
+
+/* Sidebar: the name and picture link to My profile */
+.ws-user-link {
+  display: flex; min-width: 0; flex: 1; align-items: center; gap: 10px; margin: -6px; padding: 6px;
+  border-radius: var(--r-md); color: inherit; text-decoration: none; transition: background 140ms var(--ease);
+}
+.ws-user-link:hover, .ws-user-link.active { background: rgb(255 255 255 / 10%); }
+.ws-user-link .ws-user { display: flex; min-width: 0; flex-direction: column; }

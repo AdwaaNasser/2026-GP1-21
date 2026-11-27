@@ -17,6 +17,14 @@ export const STATUSES = [
   ['completed', 'Completed'],
 ];
 
+// Every status a task can have, for badges. STATUSES above stays the list a
+// manager can pick from; In Review and Changes Requested come from the review flow.
+const STATUS_LABELS = [
+  ...STATUSES,
+  ['in_review', 'In Review'],
+  ['changes_requested', 'Changes Requested'],
+];
+
 export function labelOf(list, value) {
   const found = list.find((item) => item[0] === value);
   return found ? found[1] : value;
@@ -266,7 +274,7 @@ export function StatusBadge({ status }) {
   return (
     <span className={`ws-status ws-status-${status}`}>
       <span className="ws-dot" />
-      {labelOf(STATUSES, status)}
+      {labelOf(STATUS_LABELS, status)}
     </span>
   );
 }
@@ -753,8 +761,8 @@ export function ProjectForm({ project, onSubmit, onCancel }) {
 // ---------- Task details panel (employee actions and manager review) ----------
 
 const FEEDBACK_TITLES = {
-  changes_requested: 'Changes requested',
-  in_review: 'Previous feedback',
+  changes_requested: 'asked for changes',
+  in_review: 'previous feedback',
 };
 
 // Task details inside a side panel, plus the actions that belong to the viewer:
@@ -845,13 +853,15 @@ export function TaskPanel({ task, role, onEdit, onAdvance, onReview, onDelete, p
       </div>
 
       {task.feedback && (
-        <div className={`ws-feedback${task.status === 'changes_requested' ? ' ws-feedback-alert' : ''}`}>
-          <div className="ws-feedback-title">
-            <Icon name="message" size={15} />
-            {FEEDBACK_TITLES[task.status] || 'Manager feedback'}
+        // Shown as a message from the manager, not as an error.
+        <section className={`ws-note${task.status === 'changes_requested' ? ' ws-note-changes' : ''}`} aria-label="Manager feedback">
+          <div className="ws-note-head">
+            <span className="ws-note-avatar" aria-hidden="true"><Icon name="message" size={13} /></span>
+            <span className="ws-note-from">{role === 'Employee' ? 'Your manager' : 'You'}</span>
+            <span className="ws-note-tag">{FEEDBACK_TITLES[task.status] || 'left feedback'}</span>
           </div>
-          <p>{task.feedback}</p>
-        </div>
+          <p className="ws-note-text">{task.feedback}</p>
+        </section>
       )}
 
       {error && <div className="ws-form-error" role="alert">{error}</div>}
@@ -1370,11 +1380,19 @@ export function Shell({ role, title, subtitle, breadcrumbs = [], children }) {
           ))}
         </nav>
         <div className="ws-sidebar-footer">
-          <Avatar name={displayName(login.user)} size={32} />
-          <div className="ws-user">
-            <span className="ws-user-name">{displayName(login.user)}</span>
-            <span className="ws-user-role">{login.user.role}</span>
-          </div>
+          {/* The name and picture open the person's profile page. */}
+          <a
+            className={`ws-user-link${isActive('/profile') ? ' active' : ''}`}
+            href="/profile"
+            title="My profile"
+            aria-current={isActive('/profile') ? 'page' : undefined}
+          >
+            <Avatar name={displayName(login.user)} size={32} />
+            <span className="ws-user">
+              <span className="ws-user-name">{displayName(login.user)}</span>
+              <span className="ws-user-role">{login.user.role}</span>
+            </span>
+          </a>
           <button type="button" className="ws-icon-btn" onClick={logout} aria-label="Log out" title="Log out">
             <Icon name="logout" size={17} />
           </button>
