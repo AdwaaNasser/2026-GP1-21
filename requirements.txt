@@ -9,3 +9,4 @@ shap
 pandas
 numpy
 joblib
+xgboost==3.4.1  # used only in notebooks/regression_model.ipynb for model comparison
