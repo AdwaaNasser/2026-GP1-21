@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from workspace.serializers import check_half_hours, hours_for_period_problem, task_hours_field
+
 from . import rules, services
 
 
@@ -20,6 +22,12 @@ class RecommendRequestSerializer(serializers.Serializer):
     skills = TaskSkillSerializer(many=True, required=False, default=list)
     start_date = serializers.DateField()
     due_date = serializers.DateField()
+    # Hours the new task needs. Required: an employee whose free hours in the
+    # period do not cover them is excluded.
+    estimated_hours = task_hours_field()
+
+    def validate_estimated_hours(self, value):
+        return check_half_hours(value)
 
     def validate_skills(self, skills):
         ids = [s['skill_id'] for s in skills]
@@ -37,4 +45,7 @@ class RecommendRequestSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {'due_date': 'The due date cannot be before the start date.'}
             )
+        problem = hours_for_period_problem(data['estimated_hours'], data['start_date'], data['due_date'])
+        if problem:
+            raise serializers.ValidationError({'estimated_hours': problem})
         return data

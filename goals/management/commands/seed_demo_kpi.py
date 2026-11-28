@@ -186,7 +186,6 @@ class Command(BaseCommand):
             )
 
     def add_current_goals(self, employee, manager, year, rng, strength):
-        today = timezone.localdate()
         specs = [  # (name, type, period, weight, target)
             ('Delivery quality', 'Manual', 'annual', 40, 10),
             ('Customer follow-ups', 'Manual', 'Q1', 30, 8),

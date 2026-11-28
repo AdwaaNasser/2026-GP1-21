@@ -98,6 +98,9 @@ class User(AbstractBaseUser):
     )
     allowed_absence_days = models.IntegerField(blank=True, null=True)
     department = models.CharField(max_length=255, blank=True, null=True)
+    # When the last invitation email was sent (null = never). A CSV import can
+    # only be cancelled while none of its people has been invited.
+    invited_at = models.DateTimeField(blank=True, null=True)
     org = models.ForeignKey(
         Organization,
         on_delete=models.PROTECT,
@@ -131,10 +134,6 @@ class User(AbstractBaseUser):
     @property
     def is_active(self):
         return True
-
-    @property
-    def is_staff(self):
-        return self.role == 'HR'
 
     @property
     def display_name(self):
@@ -290,6 +289,8 @@ class TaskSkill(models.Model):
         related_name='task_records',
     )
     skill_level = models.CharField(max_length=50, blank=True, null=True)
+    # True = required skill (excludes people without it), False = optional (ranking only).
+    is_required = models.BooleanField(default=True)
 
     class Meta:
         db_table = 'task_skills'
@@ -498,7 +499,7 @@ class BurnoutSurvey(models.Model):
         null=True,
     )
     # Answers to the questions used by the burnout prediction model. They are
-    # asked in the same monthly survey as the BAT-12; all are required in the
+    # asked in the same well-being survey as the BAT-12; all are required in the
     # form, the columns are nullable so a row can exist without them.
     stress_score = models.PositiveSmallIntegerField(blank=True, null=True)
     work_life_balance_score = models.PositiveSmallIntegerField(blank=True, null=True)

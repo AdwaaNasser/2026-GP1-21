@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { apiRequest, displayName, responseData, validatedSubmit } from './api.js';
+import { apiRequest, displayName, getLogin, responseData, validatedSubmit } from './api.js';
 import { CURRENT_YEAR, Panel, YearSelect } from './Performance.jsx';
 import {
   Shell,
   Banner,
   Avatar,
+  ConfirmDialog,
   EmptyState,
   Icon,
   Modal,
@@ -20,15 +21,23 @@ import {
 // ==================== HrTeam ====================
 
 const BATCH_KEY = 'bayyinahCsvImportV3';
+
+// The last import summary is kept per HR account, so switching accounts in the
+// same browser tab never shows another person's import or invitations.
+function batchKey() {
+  const login = getLogin();
+  return `${BATCH_KEY}:${login?.user?.id ?? 'guest'}`;
+}
 const ROLES = ['HR Professional', 'Employee', 'Manager'];
 const GENDERS = ['Male', 'Female'];
 const SENIORITY_LEVELS = ['Junior', 'Mid', 'Senior', 'Lead', 'Principal', 'Manager'];
 
 const CSV_TEMPLATE = [
   'email,first_name,last_name,role,job_title,seniority_level,gender,department,hire_date,allowed_absence_days,manager_email',
-  'sara@example.com,Sara,Alharbi,Employee,Software Engineer,Mid,Female,Engineering,2024-01-15,21,omar@example.com',
+  // Managers come before their employees: an employee's manager_email must already exist.
   'omar@example.com,Omar,Khalid,Manager,Operations Manager,Manager,Male,Operations,2022-03-01,21,',
-  'lina@example.com,Lina,Faisal,HR Professional,HR Specialist,Senior,Female,People,2021-06-10,21,',
+  'lina@example.com,Lina,Faisal,HR Professional,HR Specialist,Senior,Female,People,2021-06-10,,',
+  'sara@example.com,Sara,Alharbi,Employee,Software Engineer,Mid,Female,Engineering,2024-01-15,21,omar@example.com',
 ].join('\n');
 
 function downloadTemplate() {
@@ -91,7 +100,7 @@ function PersonForm({ person, departments, managers, onSubmit, onCancel }) {
         seniority_level: form.seniority_level,
         gender: form.gender,
         hire_date: form.hire_date,
-        allowed_absence_days: Number(form.allowed_absence_days),
+        allowed_absence_days: form.allowed_absence_days === '' ? null : Number(form.allowed_absence_days),
         department: form.department.trim(),
       };
       if (form.role === 'Employee') shared.manager_id = Number(form.manager_id);
@@ -144,9 +153,9 @@ function PersonForm({ person, departments, managers, onSubmit, onCancel }) {
           <input className="ws-input" value={form.job_title} maxLength={255} required placeholder="e.g. Senior Network Engineer" onChange={(e) => setField('job_title', e.target.value)} />
         </label>
         <label className="ws-field">
-          <span className="ws-label">Seniority level <span className="ws-optional">(optional)</span></span>
-          <select className="ws-select" value={form.seniority_level} onChange={(e) => setField('seniority_level', e.target.value)}>
-            <option value="">Not set</option>
+          <span className="ws-label">Seniority level</span>
+          <select className="ws-select" value={form.seniority_level} required onChange={(e) => setField('seniority_level', e.target.value)}>
+            <option value="">Choose a level</option>
             {SENIORITY_LEVELS.map((level) => <option key={level} value={level}>{level}</option>)}
           </select>
         </label>
@@ -168,8 +177,10 @@ function PersonForm({ person, departments, managers, onSubmit, onCancel }) {
 
       <div className="ws-form-grid">
         <label className="ws-field">
-          <span className="ws-label">Allowed absence days (per year)</span>
-          <input className="ws-input" type="number" min="0" max="366" step="1" value={form.allowed_absence_days} required onChange={(e) => setField('allowed_absence_days', e.target.value)} />
+          <span className="ws-label">
+            Allowed absence days (per year) {!needsDepartment && <span className="ws-optional">(optional for HR)</span>}
+          </span>
+          <input className="ws-input" type="number" min="0" max="366" step="1" value={form.allowed_absence_days} required={needsDepartment} onChange={(e) => setField('allowed_absence_days', e.target.value)} />
         </label>
         <label className="ws-field">
           <span className="ws-label">
@@ -213,9 +224,10 @@ function PersonForm({ person, departments, managers, onSubmit, onCancel }) {
 function CsvImport({ onImported, success, failure }) {
   const [file, setFile] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [batch, setBatch] = useState(() => {
     try {
-      return JSON.parse(sessionStorage.getItem(BATCH_KEY) || 'null');
+      return JSON.parse(sessionStorage.getItem(batchKey()) || 'null');
     } catch {
       return null;
     }
@@ -224,7 +236,7 @@ function CsvImport({ onImported, success, failure }) {
   function keep(next) {
     setBatch(next);
     try {
-      sessionStorage.setItem(BATCH_KEY, JSON.stringify(next));
+      sessionStorage.setItem(batchKey(), JSON.stringify(next));
     } catch {
       // Private browsing can block storage; the page still works without it.
     }
@@ -268,7 +280,30 @@ function CsvImport({ onImported, success, failure }) {
     }
   }
 
+  // Removes everyone this file added. Only before any invitation is sent;
+  // the backend refuses once one has been sent.
+  async function cancelImport() {
+    setBusy(true);
+    try {
+      const result = await sendJson('/api/accounts/import-csv/cancel/', 'POST', {
+        employee_ids: batch.pending_invitation_ids,
+      });
+      setConfirmingCancel(false);
+      keep(null);
+      success(result.message);
+      onImported();
+    } catch (error) {
+      setConfirmingCancel(false);
+      failure(error);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const allInvited = batch?.invitations?.remaining === 0;
+  // Possible until at least one invitation from this file has gone out
+  // (if every email failed, nothing was sent and the import can still be cancelled).
+  const canCancel = Boolean(batch && !(batch.invitations?.invited > 0) && batch.pending_invitation_ids?.length);
 
   return (
     <section className="ws-card ws-side-card" id="import">
@@ -277,9 +312,9 @@ function CsvImport({ onImported, success, failure }) {
           <h3>Import your team from a CSV file</h3>
           <p>
             Every row needs: email, first_name, last_name, role (Employee, Manager or HR Professional),
-            gender (Male or Female), hire_date (YYYY-MM-DD) and allowed_absence_days. job_title (free text, for example
-            Senior Network Engineer). seniority_level is optional (Junior, Mid, Senior, Lead, Principal or Manager). Department is needed
-            for employees and managers. Employees should have manager_email, the email of their direct manager (list the manager on an earlier row, or use a manager who already exists). Review the summary, then send the invitations.
+            job_title (free text, for example Senior Network Engineer), seniority_level (Junior, Mid, Senior, Lead, Principal
+            or Manager), gender (Male or Female) and hire_date (YYYY-MM-DD). Employees and managers also need department and
+            allowed_absence_days. Employees also need manager_email, the email of their direct manager (list the manager on an earlier row, or use a manager who already exists). Review the summary, then send the invitations.
           </p>
         </div>
         <button type="button" className="ws-btn ws-btn-secondary ws-btn-sm" onClick={downloadTemplate}>
@@ -329,16 +364,41 @@ function CsvImport({ onImported, success, failure }) {
                 ? `${batch.invitations.invited} invited · ${batch.invitations.remaining} remaining`
                 : 'Accounts are saved without passwords. Invitations have not been sent yet.'}
             </span>
-            <button
-              type="button"
-              className="ws-btn ws-btn-primary"
-              onClick={inviteAll}
-              disabled={busy || batch.summary.total_added === 0 || allInvited || !batch.pending_invitation_ids?.length}
-            >
-              {busy ? 'Sending…' : allInvited ? 'Invitations sent' : 'Send invitations'}
-            </button>
+            <div className="ws-card-tools">
+              {canCancel && (
+                <button
+                  type="button"
+                  className="ws-btn ws-btn-secondary"
+                  onClick={() => setConfirmingCancel(true)}
+                  disabled={busy}
+                >
+                  Cancel import
+                </button>
+              )}
+              <button
+                type="button"
+                className="ws-btn ws-btn-primary"
+                onClick={inviteAll}
+                disabled={busy || batch.summary.total_added === 0 || allInvited || !batch.pending_invitation_ids?.length}
+              >
+                {busy ? 'Sending…' : allInvited ? 'Invitations sent' : 'Send invitations'}
+              </button>
+            </div>
           </div>
         </div>
+      )}
+
+      {confirmingCancel && (
+        <ConfirmDialog
+          title="Cancel this import?"
+          message={`Remove the ${batch.pending_invitation_ids.length} ${batch.pending_invitation_ids.length === 1 ? 'person' : 'people'} added from this file? No invitations have been sent yet. This cannot be undone.`}
+          confirmLabel="Remove and cancel import"
+          busyLabel="Removing…"
+          cancelLabel="Keep them"
+          busy={busy}
+          onConfirm={cancelImport}
+          onCancel={() => setConfirmingCancel(false)}
+        />
       )}
     </section>
   );
@@ -474,21 +534,6 @@ function TeamContent() {
     <>
       <Banner message={banner.message} isError={banner.isError} onClose={clear} />
 
-      {waiting.length > 0 && (
-        <section className="ws-card ws-side-card" id="waiting">
-          <div className="ws-card-head">
-            <div>
-              <h3>Newly added</h3>
-              <p>
-                {waiting.length} {waiting.length === 1 ? 'employee has' : 'employees have'} not set a password yet.
-                They move to the list below once they do.
-              </p>
-            </div>
-          </div>
-          <PeopleTable list={waiting} onEdit={setEditing} onInvite={sendInvite} />
-        </section>
-      )}
-
       <section className="ws-card ws-side-card" id="people">
         <div className="ws-card-head ws-card-head-actions">
           <div>
@@ -530,6 +575,21 @@ function TeamContent() {
       </section>
 
       <CsvImport onImported={load} success={success} failure={failure} />
+
+      {waiting.length > 0 && (
+        <section className="ws-card ws-side-card" id="waiting">
+          <div className="ws-card-head">
+            <div>
+              <h3>Newly added</h3>
+              <p>
+                {waiting.length} {waiting.length === 1 ? 'employee has' : 'employees have'} not set a password yet.
+                They move to Employees in your organization once they do.
+              </p>
+            </div>
+          </div>
+          <PeopleTable list={waiting} onEdit={setEditing} onInvite={sendInvite} />
+        </section>
+      )}
 
       {adding && (
         <Modal title="Add employee" onClose={() => setAdding(false)}>

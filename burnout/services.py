@@ -1,8 +1,9 @@
 """Burnout prediction service.
 
 predict() is the ONLY function the views call to read a prediction. The model
-runs once per survey, when the employee submits the monthly survey
-(run_prediction); the result is saved in burnoutprediction and its main factors
+runs once per survey (run_prediction), when the employee submits the
+well-being survey, which opens on the schedule HR sets (monthly, every few
+months, or manually); the result is saved in burnoutprediction and its main factors
 in predictionfactor, so predict() only reads the latest saved prediction and the
 history of an employee can be shown.
 
@@ -161,11 +162,11 @@ def _as_dict(prediction, missing):
 def predict(employee):
     """The latest saved prediction of one Employee row (reads only).
 
-    Employees who have not sent the monthly survey have none: the answer is then
+    Employees who have not sent a survey yet have none: the answer is then
     'insufficient_data'."""
     prediction = _latest_prediction(employee)
     if prediction is None:
-        return insufficient(['monthly survey'])
+        return insufficient(['latest survey'])
     _values, system_missing = inputs.system_inputs(employee, timezone.localdate())
     return _as_dict(prediction, system_missing)
 

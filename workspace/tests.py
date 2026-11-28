@@ -8,7 +8,7 @@ from django.utils import timezone
 from rest_framework.test import APITestCase
 
 from accounts.models import (
-    Employee, Goal, Manager, Organization, Project, Task, TaskGoal, User,
+    Employee, Goal, Manager, Organization, Project, Skill, Task, TaskGoal, User,
 )
 
 from .permissions import PRIVATE, PUBLIC
@@ -30,6 +30,7 @@ class TaskDataTests(SimpleTestCase):
             start_date=date(2026, 10, 1),
             due_date=date(2026, 10, 9),
             priority='high',
+            estimated_hours=Decimal('6.5'),
             privacy='public',
             status=status,
             feedback='Fix the totals',
@@ -44,6 +45,7 @@ class TaskDataTests(SimpleTestCase):
             {'id': 5, 'first_name': 'Sara', 'last_name': 'Ali'},
         )
         self.assertEqual(data['privacy'], 'public')
+        self.assertEqual(data['estimated_hours'], 6.5)
         self.assertEqual(data['feedback'], 'Fix the totals')
         self.assertEqual(data['status'], 'todo')
 
@@ -338,22 +340,17 @@ class EmployeeCannotWriteTests(WorkspaceApiTestCase):
         self.assertEqual(response.status_code, 403)
         response = self.client.patch(self.project_url(self.website), {'name': 'Mine'}, format='json')
         self.assertEqual(response.status_code, 403)
-        response = self.client.get(reverse('project-members', args=[self.website.pk]))
-        self.assertEqual(response.status_code, 403)
         self.assertFalse(Project.objects.filter(title='Mine').exists())
 
     def test_employee_writes_are_refused_on_every_endpoint(self):
         # Including methods the views do not implement: 403, never a 405 or a 2xx.
         self.login(self.emp1)
-        members = reverse('project-members', args=[self.website.pk])
         calls = [
             self.client.put(self.task_url(self.pub1), {}, format='json'),
             self.client.put(reverse('task-list'), {}, format='json'),
             self.client.delete(reverse('task-list')),
             self.client.delete(self.project_url(self.website)),
             self.client.put(self.project_url(self.website), {}, format='json'),
-            self.client.put(members, {'employee_id': self.idle.pk, 'is_member': True}, format='json'),
-            self.client.delete(members),
         ]
         for response in calls:
             self.assertEqual(response.status_code, 403)
@@ -370,7 +367,6 @@ class HrIsSeparateTests(WorkspaceApiTestCase):
             self.login(hr)
             task_url = self.task_url(self.pub1)
             project_url = self.project_url(self.website)
-            members_url = reverse('project-members', args=[self.website.pk])
             calls = [
                 self.client.get(reverse('task-list')),
                 self.client.get(task_url),
@@ -381,7 +377,6 @@ class HrIsSeparateTests(WorkspaceApiTestCase):
                 self.client.get(project_url),
                 self.client.post(reverse('project-list'), {'name': 'x'}, format='json'),
                 self.client.patch(project_url, {'name': 'x'}, format='json'),
-                self.client.get(members_url),
             ]
             for response in calls:
                 self.assertEqual(response.status_code, 403, hr.email)
@@ -389,9 +384,22 @@ class HrIsSeparateTests(WorkspaceApiTestCase):
 
 
 class ManagerTaskTests(WorkspaceApiTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        # emp1 and emp2 report to manager1 (they are in manager1's Assignee list).
+        for person in (cls.emp1, cls.emp2):
+            person.employee_record.manager = cls.manager1.manager_record
+            person.employee_record.save(update_fields=['manager'])
+
     def post_task(self, user, **overrides):
         self.login(user)
-        payload = {'title': 'New task', 'project': self.website.pk, 'assignee': self.emp1.pk}
+        payload = {
+            'title': 'New task', 'project': self.website.pk, 'assignee': self.emp1.pk,
+            'estimated_hours': 4,
+            # Sunday to Thursday: 5 working days, so at most 40 hours.
+            'start_date': '2026-11-01', 'due_date': '2026-11-05',
+        }
         payload.update(overrides)
         return self.client.post(reverse('task-list'), payload, format='json')
 
@@ -418,6 +426,87 @@ class ManagerTaskTests(WorkspaceApiTestCase):
         for person in (self.outsider, self.manager2, self.hr):
             response = self.post_task(self.manager1, assignee=person.pk)
             self.assertEqual(response.status_code, 400, person.email)
+        self.assertFalse(Task.objects.filter(title='New task').exists())
+
+    def test_estimated_hours_are_required_and_saved(self):
+        response = self.post_task(self.manager1, estimated_hours=1.5)
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(Task.objects.get(pk=response.data['id']).estimated_hours, Decimal('1.5'))
+        self.assertEqual(response.data['estimated_hours'], 1.5)
+        self.login(self.manager1)
+        missing = self.client.post(
+            reverse('task-list'),
+            {'title': 'No hours', 'project': self.website.pk, 'assignee': self.emp1.pk,
+             'start_date': '2026-11-01', 'due_date': '2026-11-05'},
+            format='json',
+        )
+        self.assertEqual(missing.status_code, 400)
+        self.assertIn('estimated_hours', missing.data)
+
+    def test_estimated_hours_must_be_at_least_1_in_half_hours(self):
+        for bad in (0, 0.5, 1.25):
+            response = self.post_task(self.manager1, estimated_hours=bad)
+            self.assertEqual(response.status_code, 400, bad)
+            self.assertIn('estimated_hours', response.data)
+
+    def test_estimated_hours_fit_the_working_days_of_the_period(self):
+        # Sun Nov 1 -> Thu Nov 5 = 5 working days = 40h at most.
+        self.assertEqual(self.post_task(self.manager1, estimated_hours=40).status_code, 201)
+        too_many = self.post_task(self.manager1, estimated_hours=40.5)
+        self.assertEqual(too_many.status_code, 400)
+        self.assertIn('at most 40 hours (5 working day(s) x 8)', str(too_many.data['estimated_hours']))
+        # Sun Nov 1 -> Sat Nov 7: the weekend adds no hours.
+        self.assertEqual(self.post_task(self.manager1, estimated_hours=41,
+                                        due_date='2026-11-07').status_code, 400)
+        # Ten working weeks (50 working days) allow 400 hours.
+        self.assertEqual(self.post_task(self.manager1, estimated_hours=400,
+                                        due_date='2027-01-07').status_code, 201)
+        # One working day: 8 hours.
+        self.assertEqual(self.post_task(self.manager1, estimated_hours=9,
+                                        due_date='2026-11-01').status_code, 400)
+        # Only Friday and Saturday: no working days at all.
+        weekend = self.post_task(self.manager1, start_date='2026-11-06', due_date='2026-11-07')
+        self.assertEqual(weekend.status_code, 400)
+        self.assertIn('no working days', str(weekend.data['estimated_hours']))
+
+    def test_start_and_due_dates_are_required(self):
+        for field in ('start_date', 'due_date'):
+            response = self.post_task(self.manager1, **{field: None})
+            self.assertEqual(response.status_code, 400, field)
+            self.assertIn(field, response.data)
+
+    def test_editing_dates_or_hours_keeps_the_hours_within_the_period(self):
+        task = Task.objects.get(pk=self.post_task(self.manager1, estimated_hours=30).data['id'])
+        # Shorter period: Nov 1-2 = 16h, but the task keeps its 30 hours.
+        shorter = self.client.patch(self.task_url(task), {'due_date': '2026-11-02'}, format='json')
+        self.assertEqual(shorter.status_code, 400)
+        self.assertIn('estimated_hours', shorter.data)
+        more = self.client.patch(self.task_url(task), {'estimated_hours': 41}, format='json')
+        self.assertEqual(more.status_code, 400)
+        both = self.client.patch(self.task_url(task), {'due_date': '2026-11-02', 'estimated_hours': 16},
+                                 format='json')
+        self.assertEqual(both.status_code, 200)
+
+    def test_manager_can_change_the_estimated_hours(self):
+        task = Task.objects.get(pk=self.post_task(self.manager1).data['id'])
+        response = self.client.patch(self.task_url(task), {'estimated_hours': 7.5}, format='json')
+        self.assertEqual(response.status_code, 200)
+        task.refresh_from_db()
+        self.assertEqual(task.estimated_hours, Decimal('7.5'))
+
+    def test_priority_and_skill_level_use_the_form_choices(self):
+        self.assertEqual(self.post_task(self.manager1, priority='someday').status_code, 400)
+        skill = Skill.objects.create(name='Excel')
+        bad_level = self.post_task(self.manager1, skills=[{'skill': skill.pk, 'level': 'guru'}])
+        self.assertEqual(bad_level.status_code, 400)
+        good = self.post_task(self.manager1, priority='urgent', skills=[{'skill': skill.pk, 'level': 'expert'}])
+        self.assertEqual(good.status_code, 201)
+
+    def test_assignee_must_report_to_the_manager(self):
+        # emp3 works in the same organization but does not report to manager1.
+        response = self.post_task(self.manager1, assignee=self.emp3.pk)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('assignee', response.data)
         self.assertFalse(Task.objects.filter(title='New task').exists())
 
     def test_bad_privacy_and_bad_dates_are_rejected(self):
@@ -540,37 +629,6 @@ class ProjectTests(WorkspaceApiTestCase):
         self.assertEqual(response.status_code, 404)
         self.website.refresh_from_db()
         self.assertEqual(self.website.title, 'Website')
-
-
-class ProjectMembersTests(WorkspaceApiTestCase):
-    def test_members_are_the_employees_with_a_task_in_the_project(self):
-        self.login(self.manager1)
-        response = self.client.get(reverse('project-members', args=[self.website.pk]))
-        self.assertEqual(response.status_code, 200)
-        members = {row['employee_id']: row['is_member'] for row in response.data}
-        self.assertEqual(
-            members,
-            {
-                self.emp1.pk: True,
-                self.emp2.pk: True,
-                self.emp3.pk: False,
-                self.idle.pk: False,
-            },
-        )  # no managers, no HR, nobody from another organization
-
-    def test_manager_cannot_list_members_of_another_managers_project(self):
-        self.login(self.manager2)
-        response = self.client.get(reverse('project-members', args=[self.website.pk]))
-        self.assertEqual(response.status_code, 404)
-
-    def test_membership_cannot_be_edited_directly(self):
-        self.login(self.manager1)
-        response = self.client.put(
-            reverse('project-members', args=[self.website.pk]),
-            {'employee_id': self.idle.pk, 'is_member': True},
-            format='json',
-        )
-        self.assertEqual(response.status_code, 405)
 
 
 class GoalLinkedTaskTests(WorkspaceApiTestCase):

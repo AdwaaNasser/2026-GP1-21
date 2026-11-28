@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date
 from unittest.mock import patch
 
 from django.test import SimpleTestCase, override_settings
@@ -42,6 +42,18 @@ class RulesTests(SimpleTestCase):
         self.assertIn('Skills', rules.exclusion_reason(False, ['missing SQL'], 24))
         self.assertIsNone(rules.exclusion_reason(True, [], 8))  # partial leave: still eligible
 
+    def test_free_hours_are_a_hard_condition(self):
+        self.assertEqual(rules.remaining_hours(24, 30), 0)  # never below 0
+        # Fully busy: excluded even when the new task's hours are not known.
+        self.assertIn('No free working hours', rules.exclusion_reason(False, [], 40, busy_hours=40))
+        self.assertEqual(rules.exclusion_reason(False, [], 40, busy_hours=35, task_hours=10),
+                         'Insufficient available working hours (10h needed, 5h free)')
+        self.assertIsNone(rules.exclusion_reason(False, [], 40, busy_hours=30, task_hours=10))  # exactly 10h
+        # Partial leave with enough time left is still eligible.
+        self.assertIsNone(rules.exclusion_reason(True, [], 16, busy_hours=0, task_hours=10))
+        # Missing skills are reported first.
+        self.assertIn('Skills', rules.exclusion_reason(False, ['missing SQL'], 40, 40, 10))
+
     def test_score_is_between_0_and_1_and_comes_with_reasons(self):
         required = [(1, 'Python', 2)]
         best, reasons = rules.score({1: 4}, required, [], 5, 5, 0, 24)
@@ -84,6 +96,14 @@ class SemanticTests(SimpleTestCase):
 
     def test_missing_model_does_not_break_the_recommendation(self):
         with patch.object(semantic, 'get_model', side_effect=ImportError):
+            self.assertEqual(semantic.similarities('Sales report', {1: 'Built a report'}), {})
+
+    def test_failed_encoding_does_not_break_the_recommendation(self):
+        class BrokenModel:
+            def encode(self, *args, **kwargs):
+                raise RuntimeError('out of memory')
+
+        with patch.object(semantic, 'get_model', return_value=BrokenModel()):
             self.assertEqual(semantic.similarities('Sales report', {1: 'Built a report'}), {})
 
 
@@ -150,6 +170,7 @@ class RecommendApiTests(APITestCase):
         body = {
             'skills': [{'skill_id': self.python.pk, 'level': 'intermediate'}],
             'start_date': str(START), 'due_date': str(END),
+            'estimated_hours': 1,
         }
         body.update(changes)
         return self.client.post(reverse('recommend-employees'), body, format='json')
@@ -195,7 +216,7 @@ class RecommendApiTests(APITestCase):
         self.assertEqual(similarities.call_args.args[0], 'Sales dashboard. Charts of revenue')
         self.assertGreater(after['Sara']['score'], before['Sara'])
         self.assertLess(after['Huda']['score'], before['Huda'])
-        self.assertIn('100% similar', after['Sara']['reasons'][-1])
+        self.assertIn('100% similar', ' | '.join(after['Sara']['reasons']))
 
     def test_new_employee_without_past_work_is_not_counted_as_unrelated(self):
         # Cold start: Huda has no past work to compare, so she gets no meaning factor.
@@ -207,23 +228,82 @@ class RecommendApiTests(APITestCase):
         self.assertFalse(any('similar' in reason for reason in huda['reasons']))
 
     def test_only_people_the_manager_can_assign_are_recommended(self):
-        # Maha moves to another department, so she leaves the Assignee list
+        # Maha now reports to manager2, so she leaves the Assignee list
         # of manager1's task form: she must not be recommended either.
-        self.maha.user.department = 'Sales'
-        self.maha.user.save()
+        self.maha.manager = Manager.objects.get(user=self.manager2)
+        self.maha.save()
         data = self.ask(self.manager1).data
         names = [r['first_name'] for r in data['recommended'] + data['excluded']]
         self.assertNotIn('Maha', names)
         self.assertIn('Huda', names)
 
     def test_employee_added_through_the_website_is_recommended(self):
-        # HR invites employees with a department but no manager link: they are
-        # still in the manager's Assignee list, so they must be recommended too.
+        # HR adds Lina through the website with manager1 as her direct manager:
+        # she is in manager1's Assignee list, so she must be recommended too.
         user = make_user(self.maha.user.org, 'lina@acme.test', 'Employee')
-        lina = Employee.objects.create(user=user, system_role='Employee', hire_date=date(2024, 1, 1))
+        lina = Employee.objects.create(user=user, system_role='Employee', hire_date=date(2024, 1, 1),
+                                       manager=Manager.objects.get(user=self.manager1))
         EmployeeSkill.objects.create(employee=lina, skill=self.python, skill_level='advanced')
         names = [r['first_name'] for r in self.ask(self.manager1).data['recommended']]
         self.assertIn('Lina', names)
+
+    def test_not_enough_free_hours_excludes_the_employee(self):
+        data = self.ask(self.manager1, estimated_hours=10).data
+        reasons = {r['first_name']: r['reasons'] for r in data['recommended']}
+        excluded = {r['first_name']: r['reason'] for r in data['excluded']}
+        # Huda has 24h free in the period, Noura only 2h.
+        self.assertIn('Free time covers this task (10h needed)', reasons['Huda'])
+        self.assertNotIn('Noura', reasons)
+        self.assertEqual(excluded['Noura'], 'Insufficient available working hours (10h needed, 2h free)')
+
+    def test_fully_busy_employee_is_excluded(self):
+        Task.objects.create(title='full', employee=self.huda, estimated_hours=24,
+                            status='in_progress', start_date=START, due_date=END)
+        data = self.ask(self.manager1).data
+        excluded = {r['first_name']: r['reason'] for r in data['excluded']}
+        self.assertEqual(excluded['Huda'], 'No free working hours in the task period')
+        self.assertNotIn('Huda', [r['first_name'] for r in data['recommended']])
+
+    def test_new_task_hours_are_required_and_fit_the_period(self):
+        # START -> END holds 3 working days, so 24 hours at most.
+        self.assertEqual(self.ask(self.manager1, estimated_hours=24).status_code, 200)
+        too_many = self.ask(self.manager1, estimated_hours=24.5)
+        self.assertEqual(too_many.status_code, 400)
+        self.assertIn('at most 24 hours', str(too_many.data['estimated_hours']))
+        for bad in (0, 25, 2.25, None, ''):
+            self.assertEqual(self.ask(self.manager1, estimated_hours=bad).status_code, 400, bad)
+        self.client.force_authenticate(self.manager1)
+        body = {'start_date': str(START), 'due_date': str(END)}
+        self.assertEqual(self.client.post(reverse('recommend-employees'), body, format='json').status_code, 400)
+
+    def test_overdue_unfinished_tasks_count_in_full(self):
+        # Due before the period and still not finished: all 20h are still owed.
+        Task.objects.create(title='late', employee=self.huda, estimated_hours=20,
+                            status='todo', start_date=date(2026, 10, 20), due_date=date(2026, 10, 25))
+        Task.objects.create(title='old done', employee=self.huda, estimated_hours=20,
+                            status='completed', start_date=date(2026, 10, 20), due_date=date(2026, 10, 25))
+        data = self.ask(self.manager1).data
+        huda = next(r for r in data['recommended'] if r['first_name'] == 'Huda')
+        self.assertTrue(any('4h available' in reason for reason in huda['reasons']))  # 24h - 20h
+
+    def test_tasks_without_estimated_hours_are_reported(self):
+        Task.objects.create(title='no estimate', employee=self.huda, estimated_hours=None,
+                            status='todo', start_date=START, due_date=END)
+        data = self.ask(self.manager1).data
+        reasons = {r['first_name']: r['reasons'] for r in data['recommended']}
+        self.assertIn('1 open task(s) without estimated hours, so the real workload may be higher',
+                      reasons['Huda'])
+        self.assertFalse(any('without estimated hours' in reason for reason in reasons['Sara']))
+
+    def test_same_department_without_reporting_to_the_manager_is_not_recommended(self):
+        # Rana is in manager1's department but does not report to manager1, so she
+        # is not in the Assignee list and must not be recommended.
+        user = make_user(self.maha.user.org, 'rana@acme.test', 'Employee')
+        rana = Employee.objects.create(user=user, system_role='Employee', hire_date=date(2024, 1, 1))
+        EmployeeSkill.objects.create(employee=rana, skill=self.python, skill_level='expert')
+        data = self.ask(self.manager1).data
+        names = [r['first_name'] for r in data['recommended'] + data['excluded']]
+        self.assertNotIn('Rana', names)
 
     def test_without_the_model_ranking_still_works(self):
         with patch.object(semantic, 'get_model', side_effect=ImportError):
@@ -236,21 +316,42 @@ class RecommendApiTests(APITestCase):
                                     start_date=date(2026, 11, 2), end_date=date(2026, 11, 3))
         data = self.ask(self.manager1).data  # huda keeps Sunday: 8h
         huda = next(r for r in data['recommended'] if r['first_name'] == 'Huda')
-        self.assertIn('8h available', huda['reasons'][-1])
+        self.assertIn('8h available', ' | '.join(huda['reasons']))
 
     def test_long_tasks_only_count_their_share_of_the_period(self):
         # 40h spread over 10 working days (Nov 1-12) = 4h a day; Nov 1-3 holds 3 days = 12h.
         Task.objects.create(title='long', employee=self.huda, estimated_hours=40,
                             status='todo', start_date=START, due_date=date(2026, 11, 12))
         huda = self.ask(self.manager1).data['recommended'][0]
-        self.assertIn('12h available', huda['reasons'][-1])  # 24h - 12h
+        self.assertIn('12h available', ' | '.join(huda['reasons']))  # 24h - 12h
 
     def test_meetings_count_as_busy_time(self):
         from datetime import time
         MeetingSchedule.objects.create(employee=self.huda, date=START,
                                        starts_at=time(9, 0), ends_at=time(13, 0))
         huda = self.ask(self.manager1).data['recommended'][0]
-        self.assertIn('20h available', huda['reasons'][-1])
+        self.assertIn('20h available', ' | '.join(huda['reasons']))
+
+    def test_weekend_meetings_are_not_counted(self):
+        from datetime import time
+        # Nov 6, 2026 is a Friday: not working time.
+        MeetingSchedule.objects.create(employee=self.huda, date=date(2026, 11, 6),
+                                       starts_at=time(9, 0), ends_at=time(13, 0))
+        data = self.ask(self.manager1, due_date='2026-11-07').data  # Sun -> Sat: 5 working days
+        huda = next(r for r in data['recommended'] if r['first_name'] == 'Huda')
+        self.assertTrue(any('40h available' in reason for reason in huda['reasons']))
+
+    def test_overlapping_meetings_are_counted_once(self):
+        from datetime import time
+        MeetingSchedule.objects.create(employee=self.huda, date=START,
+                                       starts_at=time(9, 0), ends_at=time(11, 0))
+        MeetingSchedule.objects.create(employee=self.huda, date=START,
+                                       starts_at=time(10, 0), ends_at=time(12, 0))
+        MeetingSchedule.objects.create(employee=self.huda, date=START,
+                                       starts_at=time(14, 0), ends_at=time(15, 0))
+        data = self.ask(self.manager1).data
+        huda = next(r for r in data['recommended'] if r['first_name'] == 'Huda')
+        self.assertTrue(any('20h available' in reason for reason in huda['reasons']))  # 24 - (3 + 1)
 
     def test_meetings_on_leave_days_are_not_counted_twice(self):
         from datetime import time
@@ -260,7 +361,7 @@ class RecommendApiTests(APITestCase):
         MeetingSchedule.objects.create(employee=self.huda, date=date(2026, 11, 2),
                                        starts_at=time(9, 0), ends_at=time(11, 0))
         huda = self.ask(self.manager1).data['recommended'][0]
-        self.assertIn('16h available', huda['reasons'][-1])  # 24h - one leave day, no meeting
+        self.assertIn('16h available', ' | '.join(huda['reasons']))  # 24h - one leave day, no meeting
 
     def test_optional_skills_rank_but_never_exclude(self):
         EmployeeSkill.objects.create(employee=self.huda, skill=self.react, skill_level='advanced')
@@ -279,7 +380,8 @@ class RecommendApiTests(APITestCase):
         for i in range(6):  # 6 more free Python developers: 8 eligible in total
             person = Employee.objects.create(
                 user=make_user(self.maha.user.org, f'dev{i}@acme.test', 'Employee'),
-                system_role='Employee', hire_date=date(2024, 1, 1))
+                system_role='Employee', hire_date=date(2024, 1, 1),
+                manager=Manager.objects.get(user=self.manager1))
             EmployeeSkill.objects.create(employee=person, skill=self.python, skill_level='expert')
         data = self.ask(self.manager1).data
         self.assertEqual(len(data['recommended']), 5)
@@ -348,15 +450,16 @@ class SkillsSavedWithTaskTests(APITestCase):
     def test_completed_task_with_saved_skill_counts_as_experience(self):
         org = Organization.objects.create(name='Acme')
         boss = make_user(org, 'boss@acme.test', 'Manager')
-        Manager.objects.create(user=boss)
+        boss_record = Manager.objects.create(user=boss)
         lina = Employee.objects.create(user=make_user(org, 'lina@acme.test', 'Employee'),
-                                       system_role='Employee', hire_date=date(2024, 1, 1))
+                                       system_role='Employee', hire_date=date(2024, 1, 1),
+                                       manager=boss_record)
         sql = Skill.objects.create(name='SQL')
         EmployeeSkill.objects.create(employee=lina, skill=sql, skill_level='advanced')
         self.client.force_authenticate(boss)
 
         created = self.client.post('/api/workspace/tasks/', {
-            'title': 'Sales report', 'assignee': lina.pk,
+            'title': 'Sales report', 'assignee': lina.pk, 'estimated_hours': 6,
             'start_date': '2026-09-01', 'due_date': '2026-09-03',
             'skills': [{'skill': sql.pk, 'level': 'intermediate'}],
         }, format='json')
@@ -368,5 +471,27 @@ class SkillsSavedWithTaskTests(APITestCase):
         Task.objects.filter(pk=task.pk).update(status='completed')
         response = self.client.post('/api/recommendations/', {
             'skills': [{'skill_id': sql.pk}], 'start_date': str(START), 'due_date': str(END),
+            'estimated_hours': 2,
         }, format='json')
         self.assertIn('1 finished task(s) using these skills', response.data['recommended'][0]['reasons'])
+
+    def test_required_and_optional_flags_are_saved_with_the_task(self):
+        org = Organization.objects.create(name='Acme')
+        boss = make_user(org, 'boss@acme.test', 'Manager')
+        lina = Employee.objects.create(user=make_user(org, 'lina@acme.test', 'Employee'),
+                                       system_role='Employee', hire_date=date(2024, 1, 1),
+                                       manager=Manager.objects.create(user=boss))
+        sql = Skill.objects.create(name='SQL')
+        excel = Skill.objects.create(name='Excel')
+        self.client.force_authenticate(boss)
+
+        created = self.client.post('/api/workspace/tasks/', {
+            'title': 'Sales report', 'assignee': lina.pk, 'estimated_hours': 6,
+            'start_date': '2026-09-01', 'due_date': '2026-09-03',
+            'skills': [{'skill': sql.pk, 'level': 'intermediate', 'required': True},
+                       {'skill': excel.pk, 'required': False}],
+        }, format='json')
+        self.assertEqual(created.status_code, 201, created.data)
+        saved = dict(Task.objects.get(title='Sales report')
+                     .skill_records.values_list('skill__name', 'is_required'))
+        self.assertEqual(saved, {'SQL': True, 'Excel': False})

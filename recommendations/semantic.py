@@ -36,6 +36,10 @@ def similarities(task_text, histories):
     except Exception:  # library not installed or model could not be downloaded
         logger.warning('Sentence Transformers is not available; ranking without it.')
         return {}
-    vectors = model.encode([task_text] + [histories[i] for i in ids], normalize_embeddings=True)
+    try:
+        vectors = model.encode([task_text] + [histories[i] for i in ids], normalize_embeddings=True)
+    except Exception:  # the model loaded but could not turn the texts into vectors
+        logger.warning('Sentence Transformers could not compare the texts; ranking without it.')
+        return {}
     task_vector = vectors[0]
     return {emp_id: max(0.0, float(task_vector @ vector)) for emp_id, vector in zip(ids, vectors[1:])}

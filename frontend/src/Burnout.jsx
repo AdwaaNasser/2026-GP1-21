@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { displayName } from './api.js';
+import { displayName, getLogin } from './api.js';
 import { Avatar, Banner, EmptyState, Icon, Shell, Stats, TableSkeleton, formatDate, getJson, sendJson, useBanner } from './ui.jsx';
 
 import { LANGUAGES, TEXT } from './surveyText.js';
@@ -8,9 +8,15 @@ import { LANGUAGES, TEXT } from './surveyText.js';
 // interface words) is in surveyText.js in English and Arabic.
 const LANGUAGE_KEY = 'bayyinah-survey-language';
 
+// The chosen language is remembered per account, so another employee who
+// signs in on the same browser starts with their own choice.
+function languageKey() {
+  return `${LANGUAGE_KEY}:${getLogin()?.user?.id ?? 'guest'}`;
+}
+
 function savedLanguage() {
   try {
-    const code = window.localStorage.getItem(LANGUAGE_KEY);
+    const code = window.localStorage.getItem(languageKey());
     return TEXT[code] ? code : 'en';
   } catch {
     return 'en';
@@ -163,7 +169,7 @@ function Survey() {
 
   function pickLanguage(code) {
     setLanguage(code);
-    try { window.localStorage.setItem(LANGUAGE_KEY, code); } catch { /* the choice is just not remembered */ }
+    try { window.localStorage.setItem(languageKey(), code); } catch { /* the choice is just not remembered */ }
   }
   const extraMissing = (key) => extra[key] === undefined || extra[key] === null;
 

@@ -208,12 +208,6 @@ function periodLabel(period) {
   return found ? found[1] : period;
 }
 
-function shortPeriod(period) {
-  if (period === 'annual') return 'Year';
-  if (period.startsWith('M')) return MONTHS[Number(period.slice(1)) - 1].slice(0, 3);
-  return period;
-}
-
 function number(value) {
   return value === null || value === undefined ? '—' : String(Number(value));
 }
@@ -224,18 +218,6 @@ function YearSelect({ year, onChange }) {
 
 function Rating({ value }) {
   return <span className={`gl-rating gl-rating-${value}`}>{value} / 5</span>;
-}
-
-function GoalProgress({ goal }) {
-  const percent = Math.round(goal.progress);
-  return (
-    <div className="ws-progress">
-      <div className="ws-progress-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(percent, 100)}>
-        <div className="ws-progress-fill" style={{ width: `${Math.min(percent, 100)}%` }} />
-      </div>
-      <span className="ws-progress-text">{percent}%</span>
-    </div>
-  );
 }
 
 const QUARTER_NAMES = ['Q1', 'Q2', 'Q3', 'Q4', 'Year'];

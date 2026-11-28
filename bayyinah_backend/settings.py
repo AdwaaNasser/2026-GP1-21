@@ -12,8 +12,15 @@ if not SECRET_KEY:
         'Set BAYYINAH_DJANGO_SECRET_KEY in the environment before starting Django.'
     )
 
-DEBUG = True
-ALLOWED_HOSTS = []
+# Local development keeps the defaults (DEBUG on). On a server, set
+# BAYYINAH_DEBUG=False and list the site's host names in BAYYINAH_ALLOWED_HOSTS
+# (comma separated), e.g. bayyinah.example.com
+DEBUG = os.environ.get('BAYYINAH_DEBUG', 'True').strip().lower() == 'true'
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.environ.get('BAYYINAH_ALLOWED_HOSTS', '').split(',')
+    if host.strip()
+]
 
 INSTALLED_APPS = [
     'django.contrib.auth',
@@ -52,7 +59,15 @@ DATABASES = {
     }
 }
 
-CORS_ALLOW_ALL_ORIGINS = True
+# Any origin may call the API only while DEBUG is on (local development).
+# Otherwise only the origins in BAYYINAH_CORS_ORIGINS (comma separated),
+# e.g. https://bayyinah.example.com
+CORS_ALLOW_ALL_ORIGINS = DEBUG
+CORS_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get('BAYYINAH_CORS_ORIGINS', '').split(',')
+    if origin.strip()
+]
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'

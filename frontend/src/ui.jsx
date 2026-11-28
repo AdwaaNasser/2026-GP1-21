@@ -50,7 +50,7 @@ export async function sendJson(path, method, body) {
 
 export async function deleteRequest(path) {
   const response = await apiRequest(path, { method: 'DELETE' });
-  if (!response.ok) await responseData(response);   // يرمي رسالة السيرفر (403 / 404)
+  if (!response.ok) await responseData(response); // throws the server's message (403 / 404)
 }
 
 
@@ -567,6 +567,7 @@ export function TaskForm({ task, projects, employees, lockedProjectId, onSubmit,
           start_date: task.start_date,
           due_date: task.due_date,
           priority: task.priority,
+          estimated_hours: task.estimated_hours == null ? '' : String(task.estimated_hours),
           privacy: task.privacy || 'private',
         }
       : {
@@ -577,32 +578,39 @@ export function TaskForm({ task, projects, employees, lockedProjectId, onSubmit,
           start_date: today(),
           due_date: '',
           priority: 'medium',
+          estimated_hours: '',
           privacy: 'private',
         },
   );
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [skills, setSkills] = useState([]); // skills chosen in the recommendation panel
+  // Fields whose warning is showing. A warning appears under its own field after
+  // Create/Save (all fields) or Find suitable employees (dates and hours),
+  // and goes away as soon as the field is filled in correctly.
+  const [checked, setChecked] = useState([]);
 
   function setField(name, value) {
     setForm((current) => ({ ...current, [name]: value }));
   }
 
   // Same rules as the backend, so problems show before anything is sent.
-  function validate() {
-    if (!form.title.trim()) return 'Task title is required.';
-    if (!form.assignee) return 'Choose an employee to assign the task to.';
-    if (!form.start_date) return 'Start date is required.';
-    if (!form.due_date) return 'Due date is required.';
-    if (form.due_date < form.start_date) return 'The due date cannot be before the start date.';
-    return '';
+  const problems = taskFieldProblems(form);
+  const fieldProblem = (name) => (checked.includes(name) ? problems[name] : '');
+  const invalid = (base, name) => (fieldProblem(name) ? `${base} is-invalid` : base);
+  const warning = (name) =>
+    fieldProblem(name) ? <span className="field-error-text" role="alert">{fieldProblem(name)}</span> : null;
+
+  // Shows the warnings of these fields; true when none of them has a problem.
+  function checkFields(names) {
+    setChecked((current) => [...new Set([...current, ...names])]);
+    return names.every((name) => !problems[name]);
   }
 
   async function submit(event) {
     event.preventDefault();
-    const problem = validate();
-    if (problem) {
-      setError(problem);
+    if (!checkFields(Object.keys(problems))) {
+      setError('');
       return;
     }
     setError('');
@@ -616,6 +624,7 @@ export function TaskForm({ task, projects, employees, lockedProjectId, onSubmit,
         start_date: form.start_date,
         due_date: form.due_date,
         priority: form.priority,
+        estimated_hours: Number(form.estimated_hours),
         privacy: form.privacy,
         ...(task ? {} : { skills }),
       });
@@ -631,7 +640,8 @@ export function TaskForm({ task, projects, employees, lockedProjectId, onSubmit,
 
       <label className="ws-field">
         <span className="ws-label">Title</span>
-        <input className="ws-input" value={form.title} maxLength={255} autoFocus onChange={(event) => setField('title', event.target.value)} />
+        <input className={invalid('ws-input', 'title')} value={form.title} maxLength={255} autoFocus onChange={(event) => setField('title', event.target.value)} />
+        {warning('title')}
       </label>
 
       <label className="ws-field">
@@ -642,12 +652,14 @@ export function TaskForm({ task, projects, employees, lockedProjectId, onSubmit,
       <div className="ws-form-grid">
         <label className="ws-field">
           <span className="ws-label">Assignee</span>
-          <select className="ws-select" value={form.assignee} onChange={(event) => setField('assignee', event.target.value)}>
+          {/* The class stays fixed: the styled dropdown adds its own class to this select. */}
+          <select className="ws-select" aria-invalid={Boolean(fieldProblem('assignee'))} value={form.assignee} onChange={(event) => setField('assignee', event.target.value)}>
             <option value="">Choose an employee</option>
             {employees.map((person) => (
               <option key={person.id} value={person.id}>{displayName(person)}</option>
             ))}
           </select>
+          {warning('assignee')}
         </label>
         <label className="ws-field">
           <span className="ws-label">Priority</span>
@@ -657,11 +669,18 @@ export function TaskForm({ task, projects, employees, lockedProjectId, onSubmit,
         </label>
         <label className="ws-field">
           <span className="ws-label">Start date</span>
-          <input className="ws-input" type="date" value={form.start_date} onChange={(event) => setField('start_date', event.target.value)} />
+          <input className={invalid('ws-input', 'start_date')} type="date" value={form.start_date} onChange={(event) => setField('start_date', event.target.value)} />
+          {warning('start_date')}
         </label>
         <label className="ws-field">
           <span className="ws-label">Due date</span>
-          <input className="ws-input" type="date" value={form.due_date} onChange={(event) => setField('due_date', event.target.value)} />
+          <input className={invalid('ws-input', 'due_date')} type="date" value={form.due_date} onChange={(event) => setField('due_date', event.target.value)} />
+          {warning('due_date')}
+        </label>
+        <label className="ws-field">
+          <span className="ws-label">Estimated hours</span>
+          <input className={invalid('ws-input', 'estimated_hours')} type="number" min="1" max={maxTaskHours(form.start_date, form.due_date) || undefined} step="0.5" placeholder={maxTaskHours(form.start_date, form.due_date) ? `1 to ${maxTaskHours(form.start_date, form.due_date)}, e.g. 1.5` : 'e.g. 1.5'} value={form.estimated_hours} onChange={(event) => setField('estimated_hours', event.target.value)} />
+          {warning('estimated_hours')}
         </label>
       </div>
 
@@ -670,6 +689,7 @@ export function TaskForm({ task, projects, employees, lockedProjectId, onSubmit,
           form={form}
           onPick={(id) => setField('assignee', id)}
           onSkillsChange={setSkills}
+          checkFields={checkFields}
         />
       )}
 
@@ -713,6 +733,57 @@ export function TaskForm({ task, projects, employees, lockedProjectId, onSubmit,
 }
 
 // ---------- Project form (create and edit) ----------
+
+// Problems in the task form's required fields: { field name: message }.
+// Each message is shown under its own field.
+function taskFieldProblems(form) {
+  const problems = {};
+  if (!form.title.trim()) problems.title = 'Task title is required.';
+  if (!form.assignee) problems.assignee = 'Choose an employee to assign the task to.';
+  if (!form.start_date) problems.start_date = 'Start date is required.';
+  if (!form.due_date) problems.due_date = 'Due date is required.';
+  else if (form.start_date && form.due_date < form.start_date) {
+    problems.due_date = 'The due date cannot be before the start date.';
+  }
+  const hours = taskHoursProblem(form.estimated_hours, form.start_date, form.due_date);
+  if (hours) problems.estimated_hours = hours;
+  return problems;
+}
+
+// Working days (Sunday to Thursday) from start to due, both included.
+// Same weekend rule as the backend (Friday and Saturday are off).
+function workingDays(start, due) {
+  if (!start || !due || due < start) return 0;
+  let days = 0;
+  const day = new Date(`${start}T00:00:00Z`);
+  const last = new Date(`${due}T00:00:00Z`);
+  while (day <= last) {
+    const weekday = day.getUTCDay(); // 5 = Friday, 6 = Saturday
+    if (weekday !== 5 && weekday !== 6) days += 1;
+    day.setUTCDate(day.getUTCDate() + 1);
+  }
+  return days;
+}
+
+// Most hours a task can take in its period: working days x 8 (0 = dates not set yet).
+function maxTaskHours(start, due) {
+  return workingDays(start, due) * 8;
+}
+
+// Estimated hours of one task: at least 1, in whole or half hours, and no more
+// than the task's working days x 8 (same rule as the backend).
+function taskHoursProblem(value, start, due) {
+  if (value === '' || value == null) return 'Estimated hours are required.';
+  const hours = Number(value);
+  if (!Number.isFinite(hours) || hours < 1) return 'Estimated hours must be at least 1.';
+  if (!Number.isInteger(hours * 2)) return 'Use whole or half hours for the estimate, for example 1.5.';
+  if (start && due && due >= start) {
+    const days = workingDays(start, due);
+    if (days === 0) return 'The task period has no working days (Sunday to Thursday).';
+    if (hours > days * 8) return `This period allows at most ${days * 8} hours (${days} working day(s) x 8).`;
+  }
+  return '';
+}
 
 // Create or edit a project. `onSubmit(body)` must throw when the server refuses.
 export function ProjectForm({ project, onSubmit, onCancel }) {
@@ -1009,7 +1080,7 @@ async function call(path, options) {
   return responseData(await apiRequest(path, options));
 }
 
-export function Recommendation({ form, onPick, onSkillsChange }) {
+export function Recommendation({ form, onPick, onSkillsChange, checkFields }) {
   const [open, setOpen] = useState(false);
   const [allSkills, setAllSkills] = useState([]);
   const [wanted, setWanted] = useState([]); // [{ skill_id, level, required }]
@@ -1033,14 +1104,14 @@ export function Recommendation({ form, onPick, onSkillsChange }) {
   // Tell the task form which skills the task needs, so they are saved with it.
   useEffect(() => {
     if (onSkillsChange) {
-      onSkillsChange(wanted.map((w) => ({ skill: Number(w.skill_id), level: w.level })));
+      onSkillsChange(wanted.map((w) => ({ skill: Number(w.skill_id), level: w.level, required: w.required })));
     }
   }, [wanted, onSkillsChange]);
 
   // Old results no longer match once the task details change, so hide them.
   useEffect(() => {
     setResult(null);
-  }, [form.title, form.description, form.start_date, form.due_date, wanted]);
+  }, [form.title, form.description, form.start_date, form.due_date, form.estimated_hours, wanted]);
 
   const skillName = (id) => (allSkills.find((s) => String(s.id) === String(id)) || {}).name || '';
   const unused = allSkills.filter((s) => !wanted.some((w) => String(w.skill_id) === String(s.id)));
@@ -1074,14 +1145,25 @@ export function Recommendation({ form, onPick, onSkillsChange }) {
   function validate() {
     if (!form.start_date || !form.due_date) return 'Enter the start and due dates first.';
     if (form.due_date < form.start_date) return 'The due date cannot be before the start date.';
+    // The recommendation needs the task's hours to check who has enough free time.
+    const hoursProblem = taskHoursProblem(form.estimated_hours, form.start_date, form.due_date);
+    if (hoursProblem) return `${hoursProblem} Enter them before finding employees.`;
     return '';
   }
 
   async function recommend() {
-    const problem = validate();
-    if (problem) {
-      setError(problem);
-      return;
+    // Inside the task form, the warnings show under the dates and hours fields themselves.
+    if (checkFields) {
+      if (!checkFields(['start_date', 'due_date', 'estimated_hours'])) {
+        setError('');
+        return;
+      }
+    } else {
+      const problem = validate();
+      if (problem) {
+        setError(problem);
+        return;
+      }
     }
     setError('');
     setLoading(true);
@@ -1094,6 +1176,7 @@ export function Recommendation({ form, onPick, onSkillsChange }) {
           description: form.description,
           start_date: form.start_date,
           due_date: form.due_date,
+          estimated_hours: Number(form.estimated_hours),
           skills: wanted.map((w) => ({
             skill_id: Number(w.skill_id),
             level: w.level,

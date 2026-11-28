@@ -3,7 +3,7 @@
 The model (burnout/ml) uses 14 inputs in Bayyinah:
   from the system (4):  gender, seniority_level, work_hours_per_week,
                         deadline_pressure_score
-  from the monthly survey (10): the questions in model_inputs.py
+  from the well-being survey (10): the questions in model_inputs.py
 The other 13 inputs of the model are not collected; the model fills them in
 itself (see burnout_predictor.py), which lowers the accuracy a little
 (R2 0.868 instead of 0.869 on the test set of the training data).

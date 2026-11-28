@@ -1,4 +1,4 @@
-"""One overall reading from the two results of the monthly survey.
+"""One overall reading from the two results of the well-being survey.
 
 The BAT result and the model prediction are on different scales (1-5 and 0-10)
 and there is no real data to choose weights, so they are NOT merged into one

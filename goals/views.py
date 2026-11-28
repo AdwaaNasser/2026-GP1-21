@@ -382,7 +382,7 @@ class TeamMemberOverviewView(APIView):
                 'job_title': user.job_title or '',
                 'department': user.department or '',
                 'hire_date': employee.hire_date,
-                'allowed_absence_days': user.allowed_absence_days or 0,
+                'allowed_absence_days': user.allowed_absence_days,
             },
             'skills': skills,
             'workload': {

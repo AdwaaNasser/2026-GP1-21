@@ -26,6 +26,7 @@ class RecommendEmployeesView(APIView):
             start=data['start_date'],
             end=data['due_date'],
             task_text=f"{data['title']}. {data['description']}".strip(' .'),
+            new_task_hours=data.get('estimated_hours'),
         )
         return Response({
             'eligible_found': bool(recommended),

@@ -47,15 +47,28 @@ def skill_gaps(has, required):
     return gaps
 
 
-def exclusion_reason(on_leave, gaps, capacity):
+def remaining_hours(capacity, busy_hours):
+    """Free hours left in the period: max(0, capacity - busy)."""
+    return max(0.0, float(capacity) - float(busy_hours))
+
+
+def exclusion_reason(on_leave, gaps, capacity, busy_hours=0, task_hours=None):
     """Why an employee is excluded, or None if they are eligible.
-    on_leave = they have approved leave in the period, capacity = their working hours in it."""
+    on_leave = they have approved leave in the period, capacity = their working hours in it,
+    busy_hours = hours already taken by tasks and meetings in it,
+    task_hours = hours the new task needs. Free time is a hard condition:
+    an employee whose free hours do not cover the new task is excluded."""
     if capacity == 0:
         if on_leave:
             return 'On approved leave for the whole task period'
         return 'No working days in the task period'
     if gaps:
         return 'Skills: ' + ', '.join(gaps)
+    free = remaining_hours(capacity, busy_hours)
+    if free == 0:
+        return 'No free working hours in the task period'
+    if task_hours is not None and float(task_hours) > free:
+        return f'Insufficient available working hours ({float(task_hours):g}h needed, {free:g}h free)'
     return None
 
 
@@ -99,3 +112,12 @@ def score(has, required, optional, past_tasks, most_past_tasks, busy_hours, capa
     if meaning is not None:
         reasons.append(f'Past work {meaning:.0%} similar to this task')
     return round(total, 2), reasons
+
+
+def task_hours_reason(task_hours, free_hours):
+    """Whether the employee's free hours in the period cover the new task."""
+    needed = float(task_hours)
+    free = max(float(free_hours), 0)
+    if free >= needed:
+        return f'Free time covers this task ({needed:g}h needed)'
+    return f'Not enough free time for this task ({needed:g}h needed, {free:g}h free)'

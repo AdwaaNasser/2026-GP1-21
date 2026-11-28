@@ -23,33 +23,6 @@ class IsManagerOnly(IsAuthenticated):
         return is_manager(request.user)
 
 
-class BurnoutPredictionView(APIView):
-    """GET /api/burnout/prediction/<employee_id>/
-
-    Manager: only employees of their own team. HR gets 403 (HR sees the
-    department totals only). Reads only, writes nothing."""
-
-    permission_classes = [IsManagerOnly]
-
-    def get(self, request, employee_id):
-        employee = services.can_view(request.user, employee_id)
-        if employee is None:
-            return Response(
-                {'detail': 'This employee is not in your team.'},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-        prediction = services.predict(employee)
-        return Response({
-            'employee': {
-                'id': employee.pk,
-                'first_name': employee.user.first_name or '',
-                'last_name': employee.user.last_name or '',
-            },
-            **prediction,
-            **services.assessment(employee, prediction),
-        })
-
-
 class BurnoutHistoryView(APIView):
     """GET /api/burnout/history/<employee_id>/
 

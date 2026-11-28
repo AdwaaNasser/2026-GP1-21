@@ -49,6 +49,8 @@ function Detail({ label, children }) {
 }
 
 function PersonalInfo({ person, role, wide = false }) {
+  const isHR = role === 'HR';
+  const hasAbsenceDays = person.allowed_absence_days !== null && person.allowed_absence_days !== undefined;
   return (
     <section className="ws-card">
       <div className="ws-card-head">
@@ -57,9 +59,17 @@ function PersonalInfo({ person, role, wide = false }) {
       </div>
       <dl className={`pf-details${wide ? ' pf-details-wide' : ''}`}>
         <Detail label="Email">{person.email}</Detail>
-        <Detail label="Department">{person.department?.name}</Detail>
         <Detail label="Role">{person.role_label || role}</Detail>
+        <Detail label="Job title">{person.job_title}</Detail>
+        <Detail label="Seniority level">{person.seniority_level}</Detail>
+        <Detail label="Gender">{person.gender}</Detail>
         <Detail label="Hire date">{person.hire_date ? formatDate(person.hire_date) : ''}</Detail>
+        {/* Department and absence days are required for employees and managers;
+            for HR they are optional, so they show only when HR has them. */}
+        {(!isHR || person.department?.name) && <Detail label="Department">{person.department?.name}</Detail>}
+        {(!isHR || hasAbsenceDays) && (
+          <Detail label="Allowed absence days (per year)">{hasAbsenceDays ? String(person.allowed_absence_days) : ''}</Detail>
+        )}
         {role === 'Employee' && <Detail label="Reports to">{person.manager?.name}</Detail>}
       </dl>
     </section>

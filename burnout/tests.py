@@ -10,7 +10,6 @@ from . import bat, combined, inputs, model_inputs, services, surveys
 from .views import (
     BatSurveyView,
     BurnoutHistoryView,
-    BurnoutPredictionView,
     DepartmentBurnoutView,
     SurveyQuestionsView,
     TeamBurnoutView,
@@ -72,7 +71,7 @@ class ServiceTests(SimpleTestCase):
         with patch.object(services, '_latest_prediction', return_value=None):
             result = services.predict(SimpleNamespace(pk=1))
         self.assertEqual(result['status'], 'insufficient_data')
-        self.assertEqual(result['missing_inputs'], ['monthly survey'])
+        self.assertEqual(result['missing_inputs'], ['latest survey'])
 
     def test_missing_system_inputs_are_reported(self):
         with patch.object(services, '_latest_prediction', return_value=self.saved()), \
@@ -130,40 +129,6 @@ class ServiceTests(SimpleTestCase):
 
 
 class ViewTests(SimpleTestCase):
-    def call(self, user, employee_id=5):
-        request = APIRequestFactory().get('/x/')
-        force_authenticate(request, user=user)
-        return BurnoutPredictionView.as_view()(request, employee_id=employee_id)
-
-    def employee(self):
-        return SimpleNamespace(pk=5, user=SimpleNamespace(first_name='A', last_name='B'))
-
-    def test_employee_role_is_forbidden(self):
-        user = SimpleNamespace(role='Employee', is_authenticated=True, pk=9)
-        with patch('burnout.views.is_manager', return_value=False):
-            self.assertEqual(self.call(user).status_code, 403)
-
-    def test_manager_outside_team_gets_404(self):
-        user = SimpleNamespace(role='Manager', is_authenticated=True, pk=9)
-        with patch('burnout.views.is_manager', return_value=True), \
-                patch('burnout.views.services.can_view', return_value=None):
-            self.assertEqual(self.call(user).status_code, 404)
-
-    def test_manager_in_team_gets_prediction(self):
-        user = SimpleNamespace(role='Manager', is_authenticated=True, pk=9)
-        with patch('burnout.views.is_manager', return_value=True), \
-                patch('burnout.views.services.can_view', return_value=self.employee()), \
-                patch('burnout.views.services.predict', return_value={'status': 'ok', 'score': 6.4, 'level': 'High', 'top_factors': [], 'missing_inputs': [], 'predicted_at': '2026-11-25'}), \
-                patch('burnout.views.services.assessment', return_value=ASSESSMENT):
-            response = self.call(user)
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(KEYS | {'employee', 'bat', 'combined'}, set(response.data))
-
-    def test_hr_is_forbidden(self):
-        user = SimpleNamespace(role='HR', is_authenticated=True, pk=9)
-        with patch('burnout.views.is_manager', return_value=False):
-            self.assertEqual(self.call(user).status_code, 403)
-
     def test_can_view_refuses_hr(self):
         hr = SimpleNamespace(role='HR', pk=1)
         self.assertIsNone(services.can_view(hr, 5))

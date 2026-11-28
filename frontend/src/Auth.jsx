@@ -265,12 +265,19 @@ export function ResetPassword() {
 
 // ==================== OrgSetup ====================
 
+const SETUP_GENDERS = ['Male', 'Female'];
+const SETUP_SENIORITY_LEVELS = ['Junior', 'Mid', 'Senior', 'Lead', 'Principal', 'Manager'];
+
 export function OrgSetup() {
   const [form, setForm] = useState({
     organization_name: '',
     first_name: '',
     last_name: '',
     email: '',
+    job_title: '',
+    gender: '',
+    seniority_level: '',
+    hire_date: '',
     password: '',
     confirm_password: '',
   });
@@ -299,6 +306,10 @@ export function OrgSetup() {
           first_name: form.first_name,
           last_name: form.last_name,
           email: form.email,
+          job_title: form.job_title.trim(),
+          gender: form.gender,
+          seniority_level: form.seniority_level,
+          hire_date: form.hire_date,
           password: form.password,
         }),
       });
@@ -319,8 +330,8 @@ export function OrgSetup() {
         <span className="auth-kicker">Your workspace starts here</span>
         <h1>Set up your organization.</h1>
         <p className="auth-description">
-          Create your organization and HR administrator account. You’ll be able to
-          add departments and invite your team next.
+          Create your organization and your HR account. You can add employees
+          and invite your team next.
         </p>
         {error && <p className="notice error" role="alert">{error}</p>}
         <form onSubmit={submit}>
@@ -338,6 +349,26 @@ export function OrgSetup() {
           </div>
           <label htmlFor="admin-email">Work email</label>
           <input id="admin-email" type="email" autoComplete="email" value={form.email} onChange={(event) => update('email', event.target.value)} required />
+          <label htmlFor="admin-job-title">Job title</label>
+          <input id="admin-job-title" type="text" maxLength="255" autoComplete="organization-title" value={form.job_title} onChange={(event) => update('job_title', event.target.value)} required />
+          <div className="form-two-columns">
+            <div>
+              <label htmlFor="admin-gender">Gender</label>
+              <select id="admin-gender" value={form.gender} onChange={(event) => update('gender', event.target.value)} required>
+                <option value="">Choose gender</option>
+                {SETUP_GENDERS.map((gender) => <option key={gender} value={gender}>{gender}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="admin-seniority">Seniority level</label>
+              <select id="admin-seniority" value={form.seniority_level} onChange={(event) => update('seniority_level', event.target.value)} required>
+                <option value="">Choose a level</option>
+                {SETUP_SENIORITY_LEVELS.map((level) => <option key={level} value={level}>{level}</option>)}
+              </select>
+            </div>
+          </div>
+          <label htmlFor="admin-hire-date">Hire date</label>
+          <input id="admin-hire-date" type="date" value={form.hire_date} onChange={(event) => update('hire_date', event.target.value)} required />
           <div className="form-two-columns">
             <div>
               <label htmlFor="setup-password">Create password</label>

@@ -1,3 +1,4 @@
+from datetime import date
 from contextlib import nullcontext
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -8,7 +9,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db.models import Q
 from django.test import SimpleTestCase
 from rest_framework import serializers as drf_serializers
-from rest_framework.test import APIRequestFactory, force_authenticate
+from rest_framework.test import APIRequestFactory, APITestCase, force_authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import (
@@ -45,7 +46,6 @@ from .views import (
     TeamInviteView,
     _change_password,
     _create_account,
-    _employee_data,
     _employees_visible_to,
     _send_invitation_email,
     _send_password_reset_email,
@@ -139,6 +139,10 @@ class SchemaTests(SimpleTestCase):
                 'last_name': 'Almutairi',
                 'email': 'raghad@example.com',
                 'password': 'ValidPassword123!',
+                'job_title': 'HR Manager',
+                'gender': 'Female',
+                'seniority_level': 'Senior',
+                'hire_date': '2024-01-15',
             },
         )
         with (
@@ -149,8 +153,12 @@ class SchemaTests(SimpleTestCase):
             self.assertTrue(serializer.is_valid(), serializer.errors)
         self.assertEqual(serializer.validated_data['first_name'], 'Raghad')
         self.assertEqual(serializer.validated_data['last_name'], 'Almutairi')
+        self.assertEqual(serializer.validated_data['job_title'], 'HR Manager')
+        self.assertEqual(serializer.validated_data['gender'], 'Female')
+        self.assertEqual(serializer.validated_data['seniority_level'], 'Senior')
+        self.assertEqual(str(serializer.validated_data['hire_date']), '2024-01-15')
 
-    def test_organization_setup_does_not_ask_for_a_hire_date(self):
+    def test_organization_setup_requires_hr_profile_fields(self):
         serializer = OrganizationSetupSerializer(
             data={
                 'organization_name': 'Example Org',
@@ -160,7 +168,14 @@ class SchemaTests(SimpleTestCase):
                 'password': 'ValidPassword123!',
             },
         )
-        self.assertNotIn('hire_date', serializer.fields)
+        with (
+            patch('accounts.views.User.objects.filter') as filter_users,
+            patch('accounts.views.validate_password'),
+        ):
+            filter_users.return_value.exists.return_value = False
+            self.assertFalse(serializer.is_valid())
+        for field in ('job_title', 'gender', 'seniority_level', 'hire_date'):
+            self.assertIn(field, serializer.errors)
 
     def test_organization_setup_rejects_combined_name_field(self):
         serializer = OrganizationSetupSerializer(
@@ -379,6 +394,8 @@ class AccountApiTests(SimpleTestCase):
             pk=5,
             email='person@example.com',
             display_name='Person One',
+            invited_at=None,
+            save=MagicMock(),
         )
         with (
             patch('accounts.views.settings.BAYYINAH_FRONTEND_URL', 'http://localhost:5173'),
@@ -386,6 +403,10 @@ class AccountApiTests(SimpleTestCase):
             patch('accounts.views.send_mail') as send_mail,
         ):
             _send_invitation_email(user)
+
+        # The time of the invitation is saved, so the import can no longer be cancelled.
+        self.assertIsNotNone(user.invited_at)
+        user.save.assert_called_once_with(update_fields=['invited_at'])
 
         email = send_mail.call_args.kwargs
         self.assertIn('finish setting up your account', email['message'])
@@ -446,7 +467,10 @@ class AccountApiTests(SimpleTestCase):
     def test_csv_import_adds_account_ids_for_separate_invite_step(self):
         upload = SimpleUploadedFile(
             'employees.csv',
-            b'email,first_name,last_name,role,job_title,department,hire_date\nperson@example.com,Person,One,Employee,Software Engineer,People,2024-01-15\n',
+            (
+                b'email,first_name,last_name,role,job_title,seniority_level,gender,department,hire_date,allowed_absence_days,manager_email\n'
+                b'person@example.com,Person,One,Employee,Software Engineer,Mid,female,People,2024-01-15,21,boss@example.com\n'
+            ),
             content_type='text/csv',
         )
         request = self.factory.post(
@@ -456,18 +480,25 @@ class AccountApiTests(SimpleTestCase):
         )
         force_authenticate(request, user=self.hr_user())
         created_user = SimpleNamespace(pk=33)
+        boss = SimpleNamespace(pk=7)
         with (
             patch('accounts.views.User.objects.filter') as filter_users,
+            patch('accounts.views.Manager.objects.filter') as filter_managers,
             patch('accounts.views._create_account', return_value=(created_user, MagicMock())) as create_account,
             patch('accounts.views.transaction.atomic', return_value=nullcontext()),
         ):
             filter_users.return_value.exists.return_value = False
+            filter_managers.return_value.first.return_value = boss
             response = CSVEmployeeImportView.as_view()(request)
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data['pending_invitation_ids'], [33])
         self.assertEqual(response.data['summary']['employees_added'], 1)
         self.assertEqual(response.data['summary']['departments'][0]['name'], 'People')
+        self.assertEqual(create_account.call_args.kwargs['gender'], 'Female')
+        self.assertEqual(create_account.call_args.kwargs['seniority_level'], 'Mid')
+        self.assertEqual(create_account.call_args.kwargs['allowed_absence_days'], 21)
+        self.assertIs(create_account.call_args.kwargs['manager'], boss)
         self.assertEqual(create_account.call_args.kwargs['first_name'], 'Person')
         self.assertEqual(create_account.call_args.kwargs['last_name'], 'One')
         self.assertEqual(
@@ -514,9 +545,9 @@ class AccountApiTests(SimpleTestCase):
         upload = SimpleUploadedFile(
             'hr.csv',
             (
-                b'email,first_name,last_name,role,job_title,department,hire_date\n'
-                b'hr@example.com,Human,Resources,HR,HR Specialist,People,2020-01-15\n'
-                b'hr2@example.com,Another,Professional,hr professional,HR Manager,People,2021-02-16\n'
+                b'email,first_name,last_name,role,job_title,seniority_level,gender,hire_date\n'
+                b'hr@example.com,Human,Resources,HR,HR Specialist,Senior,Female,2020-01-15\n'
+                b'hr2@example.com,Another,Professional,hr professional,HR Manager,Lead,Male,2021-02-16\n'
             ),
             content_type='text/csv',
         )
@@ -576,6 +607,10 @@ class AccountApiTests(SimpleTestCase):
                 'job_title': 'Software Engineer',
                 'manager_id': 7,
                 'hire_date': '2024-01-15',
+                'gender': 'Female',
+                'allowed_absence_days': 21,
+                'seniority_level': 'Mid',
+                'department': 'Engineering',
             },
             format='json',
         )
@@ -607,6 +642,8 @@ class AccountApiTests(SimpleTestCase):
             'Software Engineer',
         )
         self.assertIs(create_account.call_args.kwargs['manager'], boss)
+        self.assertEqual(create_account.call_args.kwargs['gender'], 'Female')
+        self.assertEqual(create_account.call_args.kwargs['allowed_absence_days'], 21)
 
     def test_team_invite_requires_a_manager_for_employees(self):
         request = self.factory.post(
@@ -641,6 +678,8 @@ class AccountApiTests(SimpleTestCase):
                 'role': 'HR Professional',
                 'job_title': 'HR Specialist',
                 'hire_date': '2024-01-15',
+                'gender': 'Female',
+                'seniority_level': 'Senior',
             },
             format='json',
         )
@@ -660,6 +699,74 @@ class AccountApiTests(SimpleTestCase):
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(create_account.call_args.kwargs['role'], 'HR')
+
+    def test_team_invite_manager_needs_department_and_absence_days(self):
+        request = self.factory.post(
+            '/api/accounts/team-invite/',
+            {
+                'email': 'boss@example.com',
+                'first_name': 'Boss',
+                'last_name': 'One',
+                'role': 'Manager',
+                'job_title': 'Engineering Manager',
+                'hire_date': '2024-01-15',
+                'gender': 'Male',
+                'seniority_level': 'Manager',
+            },
+            format='json',
+        )
+        force_authenticate(request, user=self.hr_user())
+        with patch('accounts.views.User.objects.filter') as filter_users:
+            filter_users.return_value.exists.return_value = False
+            response = TeamInviteView.as_view()(request)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('department', response.data)
+        self.assertIn('allowed_absence_days', response.data)
+
+    def test_team_invite_requires_gender_and_seniority_for_hr(self):
+        request = self.factory.post(
+            '/api/accounts/team-invite/',
+            {
+                'email': 'hr2@example.com',
+                'first_name': 'Another',
+                'last_name': 'Professional',
+                'role': 'HR Professional',
+                'job_title': 'HR Specialist',
+                'hire_date': '2024-01-15',
+            },
+            format='json',
+        )
+        force_authenticate(request, user=self.hr_user())
+        with patch('accounts.views.User.objects.filter') as filter_users:
+            filter_users.return_value.exists.return_value = False
+            response = TeamInviteView.as_view()(request)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('gender', response.data)
+        self.assertIn('seniority_level', response.data)
+        self.assertNotIn('department', response.data)
+        self.assertNotIn('allowed_absence_days', response.data)
+
+    def test_csv_import_employee_row_needs_manager_email(self):
+        upload = SimpleUploadedFile(
+            'employees.csv',
+            (
+                b'email,first_name,last_name,role,job_title,seniority_level,gender,department,hire_date,allowed_absence_days\n'
+                b'person@example.com,Person,One,Employee,Software Engineer,Mid,Female,People,2024-01-15,21\n'
+            ),
+            content_type='text/csv',
+        )
+        request = self.factory.post(
+            '/api/accounts/import-csv/',
+            {'file': upload},
+            format='multipart',
+        )
+        force_authenticate(request, user=self.hr_user())
+        with patch('accounts.views.User.objects.filter') as filter_users:
+            filter_users.return_value.exists.return_value = False
+            response = CSVEmployeeImportView.as_view()(request)
+        self.assertEqual(response.data['pending_invitation_ids'], [])
+        self.assertEqual(len(response.data['errors']), 1)
+        self.assertIn('manager_email', str(response.data['errors'][0]['detail']))
 
     def test_team_invite_requires_job_title(self):
         request = self.factory.post(
@@ -809,6 +916,49 @@ class AccountApiTests(SimpleTestCase):
         employee_record.save.assert_called_once_with(update_fields=['manager'])
         self.assertEqual(response.data['manager'], {'id': 7, 'name': 'Mona Manager'})
 
+    def person(self, role, **values):
+        fields = dict(
+            pk=33, email='person@example.com', first_name='Person', last_name='One',
+            role=role, job_title='Analyst', seniority_level='Mid', gender='Female',
+            employee_record=SimpleNamespace(hire_date=None, manager=None, save=MagicMock()),
+            allowed_absence_days=21, department='IT', save=MagicMock(),
+            get_role_display=lambda: role,
+        )
+        fields.update(values)
+        return SimpleNamespace(**fields)
+
+    def patch_person(self, user, body):
+        request = self.factory.patch('/api/accounts/employees/33/', body, format='json')
+        force_authenticate(request, user=self.hr_user())
+        with patch.object(EmployeeDetailView, 'get_object', return_value=user):
+            return EmployeeDetailView.as_view()(request, employee_id=33)
+
+    def test_edit_keeps_the_required_fields_of_employees_and_managers(self):
+        for role in ('Employee', 'Manager'):
+            user = self.person(role)
+            response = self.patch_person(user, {
+                'department': '', 'allowed_absence_days': None,
+                'seniority_level': '', 'gender': '',
+            })
+            self.assertEqual(response.status_code, 400, role)
+            for field in ('department', 'allowed_absence_days', 'seniority_level', 'gender'):
+                self.assertIn(field, response.data)
+            user.save.assert_not_called()
+
+    def test_edit_lets_hr_leave_department_and_absence_days_empty(self):
+        user = self.person('HR')
+        response = self.patch_person(user, {'department': '', 'allowed_absence_days': None})
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(user.department)
+        self.assertIsNone(user.allowed_absence_days)
+        self.assertIsNone(response.data['allowed_absence_days'])  # empty, not 0
+
+    def test_edit_accepts_only_male_or_female(self):
+        self.assertEqual(self.patch_person(self.person('Employee'), {'gender': 'x'}).status_code, 400)
+        user = self.person('Employee')
+        self.assertEqual(self.patch_person(user, {'gender': 'male'}).status_code, 200)
+        self.assertEqual(user.gender, 'Male')
+
     def test_a_manager_cannot_change_who_an_employee_reports_to(self):
         request = self.factory.patch(
             '/api/accounts/employees/33/',
@@ -851,3 +1001,97 @@ class AccountApiTests(SimpleTestCase):
             {'user_id': 33, 'org_id': 12},
         )
         send_email.assert_called_once_with(user)
+
+
+class CancelCsvImportTests(APITestCase):
+    """Cancel import: removes the people a CSV import added, only before any invitation."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.org = Organization.objects.create(name='Acme')
+        cls.hr, _ = _create_account(
+            email='hr@acme.test', first_name='Hana', last_name='HR', password='Pass12345!x',
+            role='HR', organization=cls.org, hire_date=date(2020, 1, 1),
+        )
+
+    def setUp(self):
+        # What one CSV import creates: a manager, their employee and an HR professional,
+        # all without passwords and not invited yet.
+        def person(email, role, manager=None):
+            user, _ = _create_account(
+                email=email, first_name='A', last_name='B', password=None, role=role,
+                organization=self.org, hire_date=date(2024, 1, 1), manager=manager,
+            )
+            return user
+
+        self.manager = person('manager@acme.test', 'Manager')
+        self.employee = person('employee@acme.test', 'Employee', self.manager.manager_record)
+        self.second_hr = person('hr2@acme.test', 'HR')
+        self.ids = [self.manager.pk, self.employee.pk, self.second_hr.pk]
+
+    def cancel(self, ids=None, user=None):
+        self.client.force_authenticate(user or self.hr)
+        return self.client.post(
+            '/api/accounts/import-csv/cancel/', {'employee_ids': ids or self.ids}, format='json',
+        )
+
+    def test_cancel_removes_everyone_the_import_added(self):
+        response = self.cancel()
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['removed'], 3)
+        self.assertFalse(User.objects.filter(pk__in=self.ids).exists())
+        self.assertFalse(Employee.objects.filter(pk__in=self.ids).exists())
+        self.assertFalse(Manager.objects.filter(pk=self.manager.pk).exists())
+        self.assertTrue(User.objects.filter(pk=self.hr.pk).exists())
+
+    def test_sending_an_invitation_sets_the_invitation_time(self):
+        with patch('accounts.views.send_mail'):
+            _send_invitation_email(self.employee)
+        self.employee.refresh_from_db()
+        self.assertIsNotNone(self.employee.invited_at)
+
+    def test_no_cancel_once_an_invitation_was_sent(self):
+        with patch('accounts.views.send_mail'):
+            _send_invitation_email(self.employee)
+        response = self.cancel()
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('already sent', response.data['detail'])
+        self.assertEqual(User.objects.filter(pk__in=self.ids).count(), 3)  # nobody removed
+
+    def test_no_cancel_once_someone_set_a_password(self):
+        self.employee.set_password('Pass12345!x')
+        self.employee.save()
+        self.assertEqual(self.cancel().status_code, 400)
+        self.assertEqual(User.objects.filter(pk__in=self.ids).count(), 3)
+
+    def test_no_cancel_when_a_manager_already_has_other_employees(self):
+        other, _ = _create_account(
+            email='other@acme.test', first_name='O', last_name='T', password=None, role='Employee',
+            organization=self.org, hire_date=date(2024, 1, 1), manager=self.manager.manager_record,
+        )
+        self.assertEqual(self.cancel().status_code, 400)
+        self.assertEqual(User.objects.filter(pk__in=self.ids).count(), 3)
+        other.refresh_from_db()
+        self.assertEqual(other.employee_record.manager_id, self.manager.pk)
+
+    def test_no_cancel_when_someone_already_has_work(self):
+        Task.objects.create(title='t', employee=self.employee.employee_record)
+        self.assertEqual(self.cancel().status_code, 400)
+        self.assertEqual(User.objects.filter(pk__in=self.ids).count(), 3)
+
+    def test_only_people_of_this_organization(self):
+        outsider_org = Organization.objects.create(name='Other')
+        outsider, _ = _create_account(
+            email='x@other.test', first_name='X', last_name='Y', password=None, role='Employee',
+            organization=outsider_org, hire_date=date(2024, 1, 1),
+        )
+        self.assertEqual(self.cancel(self.ids + [outsider.pk]).status_code, 400)
+        self.assertEqual(self.cancel([self.hr.pk]).status_code, 400)  # not your own account
+        self.assertTrue(User.objects.filter(pk=outsider.pk).exists())
+        self.assertEqual(User.objects.filter(pk__in=self.ids).count(), 3)
+
+    def test_only_hr_can_cancel(self):
+        self.manager.set_password('Pass12345!x')
+        self.manager.save()
+        self.assertEqual(self.cancel([self.employee.pk], user=self.manager).status_code, 403)
+        self.assertTrue(User.objects.filter(pk=self.employee.pk).exists())

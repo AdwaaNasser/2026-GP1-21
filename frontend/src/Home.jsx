@@ -288,7 +288,7 @@ function Hero() {
           Bayyinah brings employee records, projects, tasks and performance goals into one platform for small and medium-sized enterprises (SMEs), with task recommendations and burnout risk prediction to support managers.
         </p>
         <div className="lx-actions lx-fade" style={{ animationDelay: '900ms' }}>
-          <a className="lx-btn lx-btn-primary" href="/setup">Set up your organisation <span aria-hidden="true">→</span></a>
+          <a className="lx-btn lx-btn-primary" href="/setup">Set up your organization <span aria-hidden="true">→</span></a>
           <a className="lx-btn lx-btn-ghost" href="/login">Log in</a>
         </div>
       </div>
@@ -303,7 +303,7 @@ function Hero() {
 // ==================== Numbers ====================
 
 const FACTS = [
-  ['Employee management', 'Manage employee records, skills and organisational information.'],
+  ['Employee management', 'Manage employee records, skills and organizational information.'],
   ['Projects & tasks', 'Manage projects, assign tasks and monitor work progress.'],
   ['Performance management', 'Set performance goals and track employee progress.'],
 ];
@@ -455,9 +455,9 @@ function Feature({ id, eyebrow, title, accent, lead, points, flip = false, child
 // ==================== Roles ====================
 
 const ROLES = [
-  ['HR', 'Manage your organisation', 'Maintain employee records and manage access to the organisation.', ['Employee records', 'Organisation setup', 'Employee invitations']],
+  ['HR', 'Manage your organization', 'Maintain employee records and manage access to the organization.', ['Employee records', 'Organization setup', 'Employee invitations']],
   ['Manager', 'Manage your team', 'Plan work, follow team progress and review recommendations before making decisions.', ['Task recommendations', 'Projects and goals', 'Team burnout insights']],
-  ['Employee', 'Manage your work', 'Know what is assigned to you, follow your goals and update your progress.', ['Assigned tasks', 'Goals and progress', 'Monthly burnout survey']],
+  ['Employee', 'Manage your work', 'Know what is assigned to you, follow your goals and update your progress.', ['Assigned tasks', 'Goals and progress', 'Regular burnout survey']],
 ];
 
 function Roles() {
@@ -487,7 +487,7 @@ function Roles() {
 // ==================== Steps ====================
 
 const STEPS = [
-  ['Set up your organisation', 'Add employee records individually or import a CSV file, then invite employees to join.'],
+  ['Set up your organization', 'Add employee records individually or import a CSV file, then invite employees to join.'],
   ['Work management', 'Create projects and goals, assign tasks and follow employee progress.'],
   ['Decision support', 'Managers review task recommendations and team burnout insights as part of their decisions.'],
 ];
@@ -520,9 +520,9 @@ function Steps() {
 const FAQ = [
   ['What is Bayyinah?', 'Bayyinah is an AI-assisted HR platform that brings employee management, work management and managerial decision support together.'],
   ['How are employees recommended for tasks?', 'Eligible team members are ranked using available information on skills, relevant experience and estimated availability. Recommendations do not guarantee that a new task fits the employee’s schedule.'],
-  ['How does burnout risk prediction work?', 'A monthly survey provides employee responses, which are used with work-related and employee data to estimate a burnout score. The manager reviews the estimate alongside the BAT-12 assessment.'],
-  ['Who is Bayyinah for?', 'Bayyinah is designed for small and medium-sized enterprises that need to organise employee information and work in one platform, with decision support for managers.'],
-  ['Can Bayyinah diagnose burnout?', 'No. Bayyinah uses a monthly BAT-12 assessment and a separate model estimate. Their categories are interpreted together to guide managerial follow-up, not medical diagnosis.'],
+  ['How does burnout risk prediction work?', 'A regular survey, sent on the schedule HR sets, provides employee responses, which are used with work-related and employee data to estimate a burnout score. The manager reviews the estimate alongside the BAT-12 assessment.'],
+  ['Who is Bayyinah for?', 'Bayyinah is designed for small and medium-sized enterprises that need to organize employee information and work in one platform, with decision support for managers.'],
+  ['Can Bayyinah diagnose burnout?', 'No. Bayyinah uses a regular BAT-12 assessment and a separate model estimate. Their categories are interpreted together to guide managerial follow-up, not medical diagnosis.'],
   ['Does Bayyinah assign tasks automatically?', 'No. Bayyinah ranks eligible employees using relevant skills, experience and estimated availability, including task similarity when available. Managers review suggestions and make the final decision. Availability is an estimate, not a guarantee.'],
   ['Who can access employee information and burnout results?', 'Access depends on role. HR manages employee records, managers access their own teams, and employees access their own work. Individual burnout results are available to the authorised manager, not employees or HR.'],
   ['How do employees join?', 'HR adds them one by one or imports a CSV file. Each person gets an email invitation and sets their own password.'],
@@ -559,7 +559,7 @@ function Cta() {
         <Reveal className="lx-cta" onMouseMove={trackSpotlight}>
           <div className="lx-cta-glow" aria-hidden="true" />
           <h2 id="lx-cta-title" className="lx-h2">Get Started <span className="lx-accent">with Bayyinah</span></h2>
-          <p className="lx-lead">Register your organisation to access employee management and decision-support features.</p>
+          <p className="lx-lead">Register your organization to access employee management and decision-support features.</p>
           <div className="lx-actions">
             <a className="lx-btn lx-btn-primary" href="/setup">Get started <span aria-hidden="true">→</span></a>
             <a className="lx-btn lx-btn-ghost" href="/login">Log in</a>
@@ -575,7 +575,7 @@ function Cta() {
 const FOOTER_COLUMNS = [
   ['Product', [['#burnout', 'Burnout assessment'], ['#assign', 'Task recommendations'], ['#roles', 'User roles'], ['#how', 'How it works']]],
   ['Help', [['#faq', 'FAQ'], ['/forgot-password', 'Reset password']]],
-  ['Account', [['/login', 'Log in'], ['/setup', 'Set up your organisation']]],
+  ['Account', [['/login', 'Log in'], ['/setup', 'Set up your organization']]],
 ];
 
 function LxFooter() {
@@ -594,7 +594,7 @@ function LxFooter() {
         ))}
       </div>
       <div className="lx-wrap lx-footer-bottom">
-        <span>© 2026 Bayyinah. All rights reserved.</span>
+        <span>© 2026 Bayyinah Platform. All rights reserved.</span>
         <a href="#main">Back to top ↑</a>
       </div>
     </footer>
@@ -617,7 +617,7 @@ export function Home() {
           accent="Assessment and Prediction"
           lead="Review employee-reported burnout assessments and machine learning estimates to support managerial follow-up."
           points={[
-            ['Burnout assessment', 'Employees complete a monthly survey that includes the 12-item Burnout Assessment Tool (BAT-12).'],
+            ['Burnout assessment', 'Employees complete a regular survey, sent on the schedule HR sets, that includes the 12-item Burnout Assessment Tool (BAT-12).'],
             ['Burnout risk prediction', 'Estimate burnout scores using employee responses and work-related data.'],
             ['Explainable predictions', 'Review the three main model contributions alongside the assessment and estimated score. Results support follow-up, not medical diagnosis.'],
           ]}

@@ -12,7 +12,7 @@ from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import ProtectedError, Q
 from django.utils import timezone
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
@@ -49,6 +49,8 @@ def _send_invitation_email(user):
         recipient_list=[user.email],
         fail_silently=False,
     )
+    user.invited_at = timezone.now()
+    user.save(update_fields=['invited_at'])
 
 
 def _send_password_reset_email(user):
@@ -176,7 +178,7 @@ def _employee_data(user):
         'invitation_pending': _invitation_pending(user),
         'hire_date': _hire_date_of(user),
         'manager': _manager_of(user),
-        'allowed_absence_days': user.allowed_absence_days or 0,
+        'allowed_absence_days': user.allowed_absence_days,
         'department': {
             'id': user.department or '',
             'name': user.department or '',
@@ -185,8 +187,9 @@ def _employee_data(user):
 
 
 def _clean_seniority(value):
-    """Seniority is optional. Blank means not set; anything else must be one
-    of the allowed levels (any letter case)."""
+    """Blank means not given (the caller reports it as missing, since every
+    role needs a seniority level); anything else must be one of the allowed
+    levels (any letter case)."""
     text = str(value or '').strip()
     if not text:
         return None
@@ -196,6 +199,35 @@ def _clean_seniority(value):
     raise serializers.ValidationError(
         'Seniority level must be Junior, Mid, Senior, Lead, Principal or Manager.'
     )
+
+
+def _clean_gender(value):
+    """Blank means not given; otherwise Male or Female (any letter case)."""
+    text = str(value or '').strip()
+    if not text:
+        return None
+    for gender in ('Male', 'Female'):
+        if gender.casefold() == text.casefold():
+            return gender
+    raise serializers.ValidationError('Gender must be Male or Female.')
+
+
+def _missing_role_fields(role, gender, seniority, department, absence_days):
+    """Fields every new account needs, by role.
+    Everyone: gender and seniority level.
+    Employees and managers also: department and allowed absence days.
+    (Employees also need a direct manager; that is checked separately.)"""
+    missing = {}
+    if not gender:
+        missing['gender'] = 'Choose a gender.'
+    if not seniority:
+        missing['seniority_level'] = 'Choose a seniority level.'
+    if role != 'HR':
+        if not department:
+            missing['department'] = 'Enter a department.'
+        if absence_days is None:
+            missing['allowed_absence_days'] = 'Enter the allowed absence days.'
+    return missing
 
 
 def _normalize_csv_header(header):
@@ -232,6 +264,10 @@ class OrganizationSetupSerializer(serializers.Serializer):
     last_name = serializers.CharField(max_length=255)
     email = serializers.EmailField(max_length=255)
     password = serializers.CharField(write_only=True, trim_whitespace=False)
+    job_title = serializers.CharField(max_length=255)
+    gender = serializers.ChoiceField(choices=['Male', 'Female'])
+    seniority_level = serializers.ChoiceField(choices=SENIORITY_LEVELS)
+    hire_date = serializers.DateField()
 
     def validate_organization_name(self, value):
         value = value.strip()
@@ -249,6 +285,12 @@ class OrganizationSetupSerializer(serializers.Serializer):
         value = value.strip()
         if not value:
             raise serializers.ValidationError('Enter a last name.')
+        return value
+
+    def validate_job_title(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Enter a job title.')
         return value
 
     def validate_email(self, value):
@@ -281,7 +323,10 @@ class OrganizationSetupView(APIView):
                     password=data['password'],
                     role='HR',
                     organization=organization,
-                    hire_date=timezone.localdate(),  # the setup form does not ask for it
+                    hire_date=data['hire_date'],
+                    job_title=data['job_title'],
+                    gender=data['gender'],
+                    seniority_level=data['seniority_level'],
                 )
         except IntegrityError:
             return Response(
@@ -527,6 +572,7 @@ class CSVEmployeeImportView(APIView):
                         'Job title must be 255 characters or fewer.'
                     )
                 seniority = _clean_seniority(row.get('seniority_level'))
+                gender = _clean_gender(row.get('gender'))
                 if email.casefold() in seen_emails:
                     raise serializers.ValidationError(
                         'This email appears more than once in the CSV.'
@@ -547,6 +593,19 @@ class CSVEmployeeImportView(APIView):
                     raise serializers.ValidationError(
                         'Department must be 255 characters or fewer.'
                     )
+                missing = _missing_role_fields(
+                    role,
+                    gender,
+                    seniority,
+                    row.get('department'),
+                    absence_days,
+                )
+                if role == 'Employee' and not row.get('manager_email'):
+                    missing['manager_email'] = (
+                        'Enter manager_email, the email of the direct manager.'
+                    )
+                if missing:
+                    raise serializers.ValidationError(' '.join(missing.values()))
                 rows.append({
                     'row': row_number,
                     'email': email,
@@ -557,7 +616,7 @@ class CSVEmployeeImportView(APIView):
                     'seniority_level': seniority,
                     'manager_email': row.get('manager_email') or None,
                     'department': row.get('department') or None,
-                    'gender': row.get('gender') or None,
+                    'gender': gender,
                     'hire_date': date,
                     'allowed_absence_days': absence_days,
                 })
@@ -638,6 +697,68 @@ class CSVEmployeeImportView(APIView):
                 'errors': errors,
             },
             status=status.HTTP_201_CREATED,
+        )
+
+
+class CSVImportCancelView(APIView):
+    """Removes the people a CSV import added, as long as no invitation has
+    been sent to any of them. Once one is invited, the import stays."""
+
+    permission_classes = [IsAuthenticated, IsHRProfessional]
+
+    def post(self, request):
+        serializer = CSVImportInviteAllSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        employee_ids = set(serializer.validated_data['employee_ids'])
+        people = User.objects.filter(
+            user_id__in=employee_ids,
+            org_id=request.user.org_id,
+            employee_record__isnull=False,
+        ).exclude(user_id=request.user.pk)
+        if people.count() != len(employee_ids):
+            return Response(
+                {'detail': 'Some of these people are not part of this import.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if any(person.invited_at or person.has_usable_password() for person in people):
+            return Response(
+                {
+                    'detail': (
+                        'Invitations were already sent from this import, '
+                        'so it can no longer be cancelled.'
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if Employee.objects.filter(manager__user__in=people).exclude(user__in=people).exists():
+            return Response(
+                {
+                    'detail': (
+                        'A manager from this import already has other employees, '
+                        'so the import can no longer be cancelled.'
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        removed = len(employee_ids)
+        try:
+            with transaction.atomic():
+                people.delete()
+        except (ProtectedError, IntegrityError):
+            return Response(
+                {
+                    'detail': (
+                        'Some of these people already have work in Bayyinah, '
+                        'so the import can no longer be cancelled.'
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            {
+                'removed': removed,
+                'message': f'Import cancelled. {removed} {"person was" if removed == 1 else "people were"} removed.',
+            }
         )
 
 
@@ -745,6 +866,26 @@ class TeamInviteView(APIView):
                 {'email': 'A user with this email already exists.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        try:
+            gender = _clean_gender(request.data.get('gender'))
+        except serializers.ValidationError as error:
+            return Response(
+                {'gender': error.detail[0]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        absence_days = request.data.get('allowed_absence_days')
+        if absence_days in (None, ''):
+            absence_days = None
+        else:
+            try:
+                absence_days = serializers.IntegerField(min_value=0).run_validation(
+                    absence_days,
+                )
+            except serializers.ValidationError as error:
+                return Response(
+                    {'allowed_absence_days': error.detail[0]},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         department = str(request.data.get('department', '')).strip() or None
         if department and len(department) > 255:
             return Response(
@@ -779,6 +920,10 @@ class TeamInviteView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        missing = _missing_role_fields(role, gender, seniority, department, absence_days)
+        if missing:
+            return Response(missing, status=status.HTTP_400_BAD_REQUEST)
+
         try:
             with transaction.atomic():
                 user, _ = _create_account(
@@ -790,6 +935,8 @@ class TeamInviteView(APIView):
                     organization=request.user.org,
                     hire_date=hire_date,
                     department=department,
+                    gender=gender,
+                    allowed_absence_days=absence_days,
                     job_title=job_title,
                     seniority_level=seniority,
                     manager=manager,
@@ -942,6 +1089,30 @@ class EmployeeDetailView(APIView):
             )
         if 'seniority_level' in data:
             data['seniority_level'] = data['seniority_level'] or None
+        # Same required fields as when the person was added (see _missing_role_fields).
+        problems = {}
+        if 'gender' in data:
+            try:
+                data['gender'] = _clean_gender(data['gender'])
+            except serializers.ValidationError as error:
+                problems['gender'] = error.detail[0]
+            else:
+                if data['gender'] is None:
+                    problems['gender'] = 'Choose a gender.'
+        if 'seniority_level' in data and data['seniority_level'] is None:
+            problems['seniority_level'] = 'Choose a seniority level.'
+        if 'department' in data:
+            data['department'] = (data['department'] or '').strip() or None
+            if data['department'] is None and user.role != 'HR':
+                problems['department'] = 'Enter a department.'
+        if (
+            'allowed_absence_days' in data
+            and data['allowed_absence_days'] is None
+            and user.role != 'HR'
+        ):
+            problems['allowed_absence_days'] = 'Enter the allowed absence days.'
+        if problems:
+            return Response(problems, status=status.HTTP_400_BAD_REQUEST)
         for field, value in data.items():
             setattr(user, field, value)
         user.save()

@@ -4,7 +4,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.db import transaction
-from accounts.models import Project, Task, TaskGoal, User
+from accounts.models import Project, Task, TaskGoal
 
 from .permissions import PUBLIC, IsManagerOrEmployee, is_employee, is_manager
 from .serializers import ProjectWriteSerializer, TaskWriteSerializer
@@ -116,7 +116,8 @@ def tasks_for(user):
     if is_manager(user):
         return tasks.filter(
             Q(project__manager_id=user.pk)
-            | Q(project__isnull=True, employee__manager_id=user.pk)  # مهام بلا مشروع: لموظفيه فقط
+            # Tasks without a project: only those of the manager's own employees.
+            | Q(project__isnull=True, employee__manager_id=user.pk)
         )
     if is_employee(user):
         return tasks.filter(
@@ -150,6 +151,7 @@ def task_data(task, user):
         'start_date': task.start_date,
         'due_date': task.due_date,
         'priority': task.priority,
+        'estimated_hours': None if task.estimated_hours is None else float(task.estimated_hours),
         'privacy': task.privacy,
         'feedback': task.feedback,
         'created_at': task.created_at,
@@ -252,40 +254,6 @@ class ProjectDetailView(APIView):
             project.delete()
             refresh_goal_scores(owners)
         return Response(status=status.HTTP_204_NO_CONTENT)
-
-class ProjectMembersView(APIView):
-    """Shows the manager who takes part in one of their projects.
-
-    There is no stored member list any more: an employee takes part in a
-    project when they are assigned at least one task in it. To add someone,
-    assign them a task. Managers only.
-    """
-
-    permission_classes = [IsManagerOrEmployee]
-
-    def get(self, request, project_id):
-        if not is_manager(request.user):
-            return only_managers()
-        project = Project.objects.filter(pk=project_id, manager_id=request.user.pk).first()
-        if project is None:
-            return not_found('Project not found.')
-        member_ids = set(
-            Task.objects.filter(project=project).values_list('employee_id', flat=True)
-        )
-        employees = User.objects.filter(
-            org_id=request.user.org_id,
-            employee_record__system_role='Employee',
-        ).order_by('first_name', 'last_name')
-        return Response([
-            {
-                'employee_id': employee.pk,
-                'first_name': employee.first_name or '',
-                'last_name': employee.last_name or '',
-                'is_member': employee.pk in member_ids,
-            }
-            for employee in employees
-        ])
-
 
 # ---------- Tasks ----------
 

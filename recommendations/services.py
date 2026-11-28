@@ -25,16 +25,16 @@ TOP_N = 5  # the manager sees the best 5 eligible employees
 
 def team_of(manager_user):
     """The manager's team = the same people the task form lists under Assignee:
-    employees in the manager's organization and department. Everything comes
-    from the database, so people added through the website appear here too."""
-    return [
-        employee
-        for employee in Employee.objects.filter(
+    employees in the manager's organization who report to this manager.
+    Everything comes from the database, so people added through the website
+    appear here too."""
+    return list(
+        Employee.objects.filter(
             user__org_id=manager_user.org_id,
-            user__department=manager_user.department,
+            manager_id=manager_user.pk,
+            system_role='Employee',
         ).select_related('user')
-        if employee.user.role == 'Employee'
-    ]
+    )
 
 
 def catalogue_skills():
@@ -43,12 +43,6 @@ def catalogue_skills():
     the skill an employee has and the skill a task needs are the same record.
     It holds no company data; each company's employees and tasks stay separate."""
     return Skill.objects.all()
-
-
-def team_skills(manager_user):
-    """Kept for older callers: every catalogue skill can now be required by a task,
-    even if no one in the team has it yet."""
-    return catalogue_skills()
 
 
 def work_histories(employee_ids):
@@ -106,6 +100,13 @@ def task_hours_in_period(
 
     Assumption:
     Task hours are distributed evenly across working days.
+
+    Overdue tasks (due before the period starts and still not finished)
+    count with their full estimated hours: the work is still owed and
+    has to be done in the new period.
+
+    A task without estimated hours counts as 0 here; recommend() reports
+    it to the manager so the workload is not shown as certain.
     """
     if estimated_hours is None:
         return 0.0
@@ -119,6 +120,10 @@ def task_hours_in_period(
     # Invalid or non-working task period:
     # conservatively count the full effort.
     if task_start > task_end:
+        return hours
+
+    # Overdue and unfinished: all of it is still to do.
+    if task_end < start:
         return hours
 
     total_days = rules.working_days(task_start, task_end)
@@ -168,10 +173,30 @@ def leave_days(employee_ids, start, end):
     return days
 
 
+def merged_length(intervals):
+    """Total hours covered by (start, end) datetime pairs, counting
+    overlapping time once (the union of the intervals)."""
+    total = 0.0
+    current_start = current_end = None
+    for begin, finish in sorted(intervals):
+        if current_end is None or begin > current_end:
+            if current_end is not None:
+                total += (current_end - current_start).total_seconds() / 3600
+            current_start, current_end = begin, finish
+        elif finish > current_end:
+            current_end = finish
+    if current_end is not None:
+        total += (current_end - current_start).total_seconds() / 3600
+    return total
+
+
 def meeting_hours(employee_ids, start, end, days_off=None):
-    """Calculate meeting hours, excluding approved leave days."""
+    """Calculate meeting hours in working time.
+    Skips approved leave days and weekends (not working time), and counts
+    overlapping meetings on the same day once."""
     hours = {}
     days_off = days_off or {}
+    per_day = {}
 
     meetings = (
         MeetingSchedule.objects.filter(
@@ -195,23 +220,19 @@ def meeting_hours(employee_ids, start, end, days_off=None):
         if meeting['date'] in days_off.get(emp_id, set()):
             continue
 
-        length = (
-            datetime.combine(
-                meeting['date'],
-                meeting['ends_at'],
-            )
-            - datetime.combine(
-                meeting['date'],
-                meeting['starts_at'],
-            )
-        )
+        if meeting['date'].weekday() in rules.WEEKEND_DAYS:
+            continue
 
-        duration = max(
-            length.total_seconds() / 3600,
-            0,
-        )
+        begin = datetime.combine(meeting['date'], meeting['starts_at'])
+        finish = datetime.combine(meeting['date'], meeting['ends_at'])
 
-        hours[emp_id] = hours.get(emp_id, 0) + duration
+        if finish <= begin:
+            continue
+
+        per_day.setdefault((emp_id, meeting['date']), []).append((begin, finish))
+
+    for (emp_id, _), intervals in per_day.items():
+        hours[emp_id] = hours.get(emp_id, 0) + merged_length(intervals)
 
     return hours
 
@@ -222,13 +243,19 @@ def recommend(
     start,
     end,
     task_text='',
+    new_task_hours=None,
 ):
     """
     Recommend eligible employees from the manager's team.
+    new_task_hours = hours the new task needs (the API always sends it);
+    when given, employees whose free hours do not cover it are excluded,
+    and each recommended person gets a reason saying their free time covers it.
 
     Filtering:
     - Required skills
     - Approved leave for the whole period (no working hours left)
+    - Free hours: excluded when no free hours are left, or when they
+      are fewer than new_task_hours
 
     Ranking:
     - Skills
@@ -268,8 +295,10 @@ def recommend(
     # 2. Existing workload
     #
     # Count only the estimated portion of each unfinished
-    # task that overlaps the requested period.
+    # task that overlaps the requested period. Unfinished tasks
+    # that are already overdue count in full.
     busy = {}
+    no_estimate = {}  # unfinished tasks without estimated hours
 
     existing_tasks = (
         Task.objects.filter(
@@ -283,6 +312,7 @@ def recommend(
                 start,
                 end,
             )
+            | Q(due_date__lt=start)
         )
         .values(
             'employee_id',
@@ -302,6 +332,9 @@ def recommend(
         )
 
         emp_id = task['employee_id']
+
+        if task['estimated_hours'] is None:
+            no_estimate[emp_id] = no_estimate.get(emp_id, 0) + 1
 
         busy[emp_id] = (
             busy.get(emp_id, 0)
@@ -408,6 +441,8 @@ def recommend(
                 required,
             ),
             capacity=capacity,
+            busy_hours=emp_busy,
+            task_hours=new_task_hours,
         )
 
         if reason:
@@ -456,6 +491,13 @@ def recommend(
             # the factor is left out for this employee instead of counting as 0.
             meaning=meaning.get(emp.pk),
         )
+        if new_task_hours is not None:
+            reasons.append(rules.task_hours_reason(new_task_hours, capacity - emp_busy))
+        unknown = no_estimate.get(emp.pk, 0)
+        if unknown:
+            reasons.append(
+                f'{unknown} open task(s) without estimated hours, so the real workload may be higher'
+            )
 
         recommended.append({
             **person,

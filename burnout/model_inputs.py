@@ -1,4 +1,4 @@
-"""The questions the burnout prediction model needs, asked in the monthly survey.
+"""The questions the burnout prediction model needs, asked in the well-being survey.
 
 The survey has two parts: the 12 BAT-12 items (see bat.py) and the 10 questions
 below. All of them are required. Each answer is stored in its own column of
